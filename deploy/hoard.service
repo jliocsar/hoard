@@ -1,0 +1,25 @@
+[Unit]
+Description=hoard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=hoard
+Group=hoard
+WorkingDirectory=/opt/hoard/apps/web
+Environment=NODE_ENV=production
+Environment=DATABASE_PATH=/var/lib/hoard/app.db
+Environment=PORT=8000
+Environment=BACKUP_ENABLED=true
+ExecStart=/usr/local/bin/bun --env-file=/etc/hoard/env run src/server.ts
+Restart=always
+RestartSec=2
+StateDirectory=hoard
+StateDirectoryMode=0700
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

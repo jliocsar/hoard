@@ -1,4 +1,4 @@
-# @dotfiles/jsx
+# @hoard/jsx
 
 Server-side JSX that renders straight to an html string. No effects inside the
 runtime; an element is a `Raw` wrapping finished markup.
@@ -6,7 +6,7 @@ runtime; an element is a `Raw` wrapping finished markup.
 ## Wiring
 
 ```json
-{ "jsx": "react-jsx", "jsxImportSource": "@dotfiles/jsx" }
+{ "jsx": "react-jsx", "jsxImportSource": "@hoard/jsx" }
 ```
 
 ## Markup components

@@ -15,9 +15,9 @@ discriminators, tasks as entities, backlinks, documents/posts, MDX).
 
 - One place for notes, meeting notes, task lists and artifacts, from phone and desktop.
 - Capture is one click and zero typing. The server picks the title.
-- Agents write here through the `dotfiles-web` CLI and its skill. That's a first-class
+- Agents write here through the `hoard` CLI and its skill. That's a first-class
   client, not an afterthought.
-- One Fly machine, one SQLite file, one Tigris bucket. Backup is one file plus the bucket.
+- One exe.dev VM, one SQLite file, one Tigris bucket. Backup is one file plus the bucket.
 
 **Non-goals for v1**
 
@@ -279,7 +279,7 @@ Entry page         [< section]  {title, editable inline}   [Attach meeting]
   a download link and the share link.
 - Mobile: PWA, installable, capture-first. **New** is the thumb-reachable primary
   action. Editing works; capture is the point.
-- The Fly machine stays always-on. Cold-starting mid-meeting feels broken.
+- The VM stays always-on. Cold-starting mid-meeting feels broken.
 
 ---
 
@@ -298,18 +298,18 @@ entry's link answers 404. Hard-deleting the entry deletes its links.
 
 ## 9. CLI and skill
 
-Agents reach the app through `dotfiles-web`, a CLI, plus a skill at
-`skills/dotfiles-web/SKILL.md` (repo root, not `web/`). Anything with a shell can
+Agents reach the app through `hoard`, a CLI, plus a skill at
+`skills/hoard/SKILL.md` (repo root). Anything with a shell can
 use it; no MCP.
 
 - `apps/cli`: Effect `unstable/cli` + `HttpApiClient.make(Api)`, sharing `api.ts` and
-  `domain.ts` with the server. `bun build --compile` → `apps/cli/dist/dotfiles-web`.
+  `domain.ts` with the server. `bun build --compile` → `apps/cli/dist/hoard`.
 - Talks to `/api` only. `/api` has no delete endpoint; delete stays a web action.
 - Auth: `login [--url]` prompts for the password, posts it to `/api/auth/login` (the one
   `/api` route outside the gate) and gets the same `{issuedAt}.{hmac}` token
-  the session cookie carries, saved with the URL to `~/.config/dotfiles-web/config.json`
+  the session cookie carries, saved with the URL to `~/.config/hoard/config.json`
   (mode `0600`). Sent as `Authorization: Bearer`; `SessionGate` accepts cookie or
-  bearer. `DOTFILES_WEB_URL` / `DOTFILES_WEB_TOKEN` override the file. Revoking a
+  bearer. `HOARD_URL` / `HOARD_TOKEN` override the file. Revoking a
   machine = rotating `SESSION_SECRET`.
 - Every request sends the machine's IANA zone in `x-time-zone`; the server prefers it over
   the `tz` cookie.
@@ -332,7 +332,7 @@ use it; no MCP.
 | `upload <file> [--title] [--tag]…` / `download <ref> [-o]`          | Presign → PUT → register in one step; duplicate title is skipped                         |
 | `share <ref> [--ttl 1h\|1d\|7d\|never]` / `unshare <linkId>`        |                                                                                          |
 
-**Pull / push.** Agents never see `version`. `pull` writes `/tmp/dotfiles-web/<slug>.md`
+**Pull / push.** Agents never see `version`. `pull` writes `/tmp/hoard/<slug>.md`
 (or `--dir`) plus a sidecar `.<slug>.json` holding `{id, version, base}`. It refuses
 to overwrite a file that differs from `base` unless `--force`. `push` sends the
 sidecar's version; on `VersionConflict` it runs `git merge-file local base remote`:
@@ -356,11 +356,16 @@ markers, unpushed-changes guard).
 
 - TypeScript, Effect v4 (`effect@rc`, `main` branch line), TS 5.9+.
 - SQLite via `@effect/sql-sqlite-bun`, WAL, forward-only migrations run on boot.
-- One Fly machine, always-on, one volume. Single process. Infra is `apps/web/alchemy.run.ts`
-  (Alchemy): app, bucket, secrets, image, machine, IPs. `bun run deploy` from the root.
+- One exe.dev VM (`jc-hoard`, https://jc-hoard.exe.xyz, public), always-on. Single
+  process: `deploy/hoard.service` runs Bun 1.4.4 on port 8000 (the port exe.dev proxies)
+  as the `hoard` user, with the DB at `/var/lib/hoard/app.db`. `bun run deploy` from the
+  root runs `scripts/deploy.sh`: it provisions the VM if needed, rsyncs the source to
+  `/opt/hoard`, installs and builds there, copies `apps/web/.env` to `/etc/hoard/env`
+  and restarts the unit.
 - Tigris for artifacts. Private bucket, signed URLs only.
   Read through `Bun.S3Client` from `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-  `BUCKET_NAME` and `AWS_ENDPOINT_URL_S3`, set as Fly secrets from the bucket's outputs.
+  `BUCKET_NAME` and `AWS_ENDPOINT_URL_S3`. The bucket is `jc-hoard-artifacts`, in the
+  user's own Tigris account; `backups/` expires after 30 days.
   Objects live at `artifacts/{uuid}`; `Content-Disposition` and `Content-Type`
   are set per signed GET, so a title rename changes the download name.
 - Auth: one password → long-lived signed session cookie; the CLI sends the same token
@@ -372,9 +377,9 @@ markers, unpushed-changes guard).
   secret logs everything out). Wrong passwords wait two seconds before answering.
 - Secrets: Google OAuth client, token encryption key, session signing key, Tigris creds.
 - Google scope: `calendar.readonly`. That's the only one.
-- Backup: Fly volume snapshots (daily, 30-day retention) plus `services/Backup.ts`:
-  hourly `VACUUM INTO` uploaded to the artifacts bucket as `backups/app-<hour>.db`.
-  Restore = download one, place it at `DATABASE_PATH`, restart the machine.
+- Backup: `services/Backup.ts`: hourly `VACUUM INTO` uploaded to the artifacts bucket
+  as `backups/app-<hour>.db`. Restore = stop `hoard`, download one to
+  `/var/lib/hoard/app.db` (owned by `hoard`), start it again.
 
 ---
 
@@ -387,7 +392,7 @@ markers, unpushed-changes guard).
 | **P2**    | Artifacts: presigned upload, signed serving, artifact list and page                                                           |
 | **P3**    | Share links on artifacts                                                                                                      |
 | **P3.5**  | Tags: `entry_tags`, `setTags`, list filter and row pills, entry-page picker                                                   |
-| **P4**    | `dotfiles-web` CLI + skill                                                                                                    |
+| **P4**    | `hoard` CLI + skill                                                                                                           |
 | **P5**    | PWA polish, install, mobile capture pass                                                                                      |
 | **Later** | `@` autocomplete, FTS search, revision history, Drive/Meet transcripts, calendar writes                                       |
 

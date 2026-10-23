@@ -1,5 +1,5 @@
-import { raw } from '@dotfiles/jsx'
-import type { Node } from '@dotfiles/jsx'
+import { raw } from '@hoard/jsx'
+import type { Node } from '@hoard/jsx'
 
 import { Icon } from './Icon.tsx'
 

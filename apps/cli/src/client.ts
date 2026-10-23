@@ -9,7 +9,7 @@ import * as HttpClient from 'effect/unstable/http/HttpClient'
 import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
 import * as HttpApiClient from 'effect/unstable/httpapi/HttpApiClient'
 
-import { Api, ZONE_HEADER } from '@dotfiles/web/api'
+import { Api, ZONE_HEADER } from '@hoard/web/api'
 
 export const Stored = Schema.Struct({ url: Schema.String, token: Schema.String })
 
@@ -31,7 +31,7 @@ export const configPath = Effect.gen(function* () {
     Config.withDefault(path.join(home, '.config')),
   )
 
-  return path.join(root, 'dotfiles-web', 'config.json')
+  return path.join(root, 'hoard', 'config.json')
 })
 
 export const readStored = Effect.gen(function* () {
@@ -65,8 +65,8 @@ export const writeStored = Effect.fn('writeStored')(function* (stored: Stored) {
 export const connection = Effect.gen(function* () {
   const stored = yield* readStored
   const env = yield* Config.all({
-    url: Config.option(Config.string('DOTFILES_WEB_URL')),
-    token: Config.option(Config.redacted('DOTFILES_WEB_TOKEN')),
+    url: Config.option(Config.string('HOARD_URL')),
+    token: Config.option(Config.redacted('HOARD_TOKEN')),
   })
   const url = Option.orElse(env.url, () => Option.map(stored, (value) => value.url))
   const token = Option.orElse(
@@ -76,7 +76,7 @@ export const connection = Effect.gen(function* () {
 
   if (Option.isNone(url) || Option.isNone(token)) {
     return yield* new NotLoggedIn({
-      message: 'not logged in; run `dotfiles-web login --url <url>`',
+      message: 'not logged in; run `hoard login --url <url>`',
     })
   }
 

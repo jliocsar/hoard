@@ -1,4 +1,4 @@
-import type { Raw } from '@dotfiles/jsx'
+import type { Raw } from '@hoard/jsx'
 import * as Effect from 'effect/Effect'
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
 

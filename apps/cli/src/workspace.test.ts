@@ -6,7 +6,7 @@ import * as ManagedRuntime from 'effect/ManagedRuntime'
 import * as Path from 'effect/Path'
 import type * as Scope from 'effect/Scope'
 
-import { entryId, entrySlug } from '@dotfiles/web/domain'
+import { entryId, entrySlug } from '@hoard/web/domain'
 
 import { ConflictMarkers, NotPulled, PutResult, UnpushedChanges, pull, push } from './workspace.ts'
 
@@ -22,7 +22,7 @@ const inTempDir = <Success, Failure>(
     Effect.scoped(
       Effect.flatMap(
         Effect.flatMap(FileSystem.FileSystem, (fs) =>
-          fs.makeTempDirectoryScoped({ prefix: 'dotfiles-web-test-' }),
+          fs.makeTempDirectoryScoped({ prefix: 'hoard-test-' }),
         ),
         body,
       ),

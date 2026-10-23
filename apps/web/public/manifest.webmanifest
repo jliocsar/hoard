@@ -1,6 +1,6 @@
 {
-  "name": "dotfiles",
-  "short_name": ".f",
+  "name": "hoard",
+  "short_name": "hoard",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

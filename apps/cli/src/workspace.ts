@@ -8,8 +8,8 @@ import * as Stream from 'effect/Stream'
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 
-import { EntryId } from '@dotfiles/web/domain'
-import type { EntrySlug } from '@dotfiles/web/domain'
+import { EntryId } from '@hoard/web/domain'
+import type { EntrySlug } from '@hoard/web/domain'
 
 export interface PulledEntry {
   readonly id: EntryId
@@ -42,7 +42,7 @@ export interface MergeResult {
 
 const MAX_PUSH_ATTEMPTS = 3
 
-export const DEFAULT_DIR = '/tmp/dotfiles-web'
+export const DEFAULT_DIR = '/tmp/hoard'
 
 export const PutResult = Data.taggedEnum<PutResult>()
 
@@ -150,7 +150,7 @@ export const merge = Effect.fn('workspace.merge')(function* (
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
-  const scratch = yield* Effect.orDie(fs.makeTempDirectoryScoped({ prefix: 'dotfiles-web-merge-' }))
+  const scratch = yield* Effect.orDie(fs.makeTempDirectoryScoped({ prefix: 'hoard-merge-' }))
   const files = {
     local: path.join(scratch, 'local'),
     base: path.join(scratch, 'base'),

@@ -10,7 +10,5 @@ apps/web/public/calendar.js
 apps/web/public/files
 apps/web/.env
 
-apps/web/.alchemy
-
 tmp/
 apps/cli/dist

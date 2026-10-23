@@ -1,5 +1,5 @@
-import { raw } from '@dotfiles/jsx'
-import type { Node, Raw } from '@dotfiles/jsx'
+import { raw } from '@hoard/jsx'
+import type { Node, Raw } from '@hoard/jsx'
 import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'

@@ -28,7 +28,7 @@ import {
   ListQuery,
   MeetingSlot,
   ShareView,
-} from '@dotfiles/web/api'
+} from '@hoard/web/api'
 import {
   EntryId,
   EntrySlug,
@@ -40,8 +40,8 @@ import {
   TagCount,
   entryRef,
   normaliseTag,
-} from '@dotfiles/web/domain'
-import type { Entry, EntryRef } from '@dotfiles/web/domain'
+} from '@hoard/web/domain'
+import type { Entry, EntryRef } from '@hoard/web/domain'
 
 import { authedClient, makeClient, readStored, writeStored } from './client.ts'
 import { DEFAULT_DIR, PutResult, entryPath, pull, push } from './workspace.ts'
@@ -580,7 +580,7 @@ const unshare = Command.make(
   }),
 ).pipe(Command.withDescription('Revoke a share link'))
 
-const root = Command.make('dotfiles-web').pipe(
+const root = Command.make('hoard').pipe(
   Command.withDescription('Notes, meetings, tasks and artifacts from the command line'),
   Command.withSubcommands([
     login,
@@ -664,7 +664,7 @@ const program = Command.run(root, { version: VERSION, renderErrors: false }).pip
       Option.contains(responseStatus(error), UNAUTHORIZED)
         ? exitWith(EXIT.auth, {
             error: 'NotLoggedIn',
-            message: 'token rejected; run `dotfiles-web login`',
+            message: 'token rejected; run `hoard login`',
           })
         : exitWith(EXIT.unexpected, { error: 'HttpClientError', message: error.message }),
   }),

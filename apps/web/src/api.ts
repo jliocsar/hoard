@@ -243,7 +243,7 @@ export class ArtifactsApi extends HttpApiGroup.make('artifacts')
   )
   .prefix('/artifacts') {}
 
-export class Api extends HttpApi.make('dotfiles')
+export class Api extends HttpApi.make('hoard')
   .add(AuthApi)
   .add(EntriesApi)
   .add(TagsApi)

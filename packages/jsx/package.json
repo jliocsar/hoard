@@ -1,6 +1,6 @@
 {
   "$schema": "http://json.schemastore.org/package",
-  "name": "@dotfiles/jsx",
+  "name": "@hoard/jsx",
   "version": "0.0.1",
   "private": true,
   "type": "module",

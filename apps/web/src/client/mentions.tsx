@@ -1,5 +1,5 @@
-import { render } from '@dotfiles/jsx'
-import type { Node } from '@dotfiles/jsx'
+import { render } from '@hoard/jsx'
+import type { Node } from '@hoard/jsx'
 import { StateEffect } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import * as Arr from 'effect/Array'

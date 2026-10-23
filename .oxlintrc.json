@@ -109,14 +109,6 @@
         "typescript/no-confusing-void-expression": "off",
         "typescript/no-unnecessary-type-conversion": "off"
       }
-    },
-    {
-      "files": ["apps/web/alchemy.run.ts"],
-      "rules": {
-        "effecttsgo/any-unknown-in-error-context": "off",
-        "effecttsgo/layer-merge-all-with-dependencies": "off",
-        "typescript/no-unsafe-assignment": "off"
-      }
     }
   ]
 }
