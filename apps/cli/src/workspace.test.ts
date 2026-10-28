@@ -8,7 +8,15 @@ import type * as Scope from 'effect/Scope'
 
 import { entryId, entrySlug } from '@hoard/web/domain'
 
-import { ConflictMarkers, NotPulled, PutResult, UnpushedChanges, pull, push } from './workspace.ts'
+import {
+  ConflictMarkers,
+  NotPulled,
+  PutResult,
+  UnpushedChanges,
+  UnsafeDir,
+  pull,
+  push,
+} from './workspace.ts'
 
 const ID = entryId('0199aaaa-0000-7000-8000-000000000000')
 const SLUG = entrySlug('plan')
@@ -153,6 +161,60 @@ describe('pull', () => {
         const forced = yield* readFile(file)
 
         expect(forced).toBe('server\n')
+      }),
+    ))
+
+  test('files are private, and a symlink in the way is replaced, not followed', () =>
+    inTempDir((dir) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem
+        const path = yield* Path.Path
+        const outside = path.join(dir, 'outside.txt')
+        const pulled = path.join(dir, 'pulled')
+
+        yield* writeFile(outside, 'untouched\n')
+        yield* fs.makeDirectory(pulled, { mode: 0o700 })
+        yield* fs.symlink(outside, path.join(pulled, `${SLUG}.md`))
+
+        const file = yield* pullPlan(pulled, 'secret\n', 1, true)
+        const info = yield* fs.stat(file)
+
+        expect(yield* readFile(outside)).toBe('untouched\n')
+        expect(yield* readFile(file)).toBe('secret\n')
+        expect(info.mode & 0o777).toBe(0o600)
+      }),
+    ))
+
+  test('refuses a dir other users can write to', () =>
+    inTempDir((dir) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem
+        const path = yield* Path.Path
+        const shared = path.join(dir, 'shared')
+
+        yield* fs.makeDirectory(shared)
+        yield* fs.chmod(shared, 0o777)
+
+        const refused = yield* Effect.flip(pullPlan(shared, 'secret\n', 1))
+
+        expect(refused).toBeInstanceOf(UnsafeDir)
+      }),
+    ))
+
+  test('refuses a dir that is a symlink', () =>
+    inTempDir((dir) =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem
+        const path = yield* Path.Path
+        const real = path.join(dir, 'real')
+        const link = path.join(dir, 'link')
+
+        yield* fs.makeDirectory(real, { mode: 0o700 })
+        yield* fs.symlink(real, link)
+
+        const refused = yield* Effect.flip(pullPlan(link, 'secret\n', 1))
+
+        expect(refused).toBeInstanceOf(UnsafeDir)
       }),
     ))
 

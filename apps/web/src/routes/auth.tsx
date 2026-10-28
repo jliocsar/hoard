@@ -6,7 +6,7 @@ import * as HttpRouter from 'effect/unstable/http/HttpRouter'
 import * as HttpServerRequest from 'effect/unstable/http/HttpServerRequest'
 import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
 
-import { LOGIN_PATH } from '../api.ts'
+import { LOGIN_PATH, Password } from '../api.ts'
 import { LoginPage } from '../pages/Login.tsx'
 import { respond } from '../render.ts'
 import { Auth, SESSION_TTL } from '../services/Auth.ts'
@@ -23,7 +23,7 @@ const COOKIE_OPTIONS = {
 
 const Next = Schema.optional(Schema.String)
 
-const LoginForm = Schema.Struct({ password: Schema.String, next: Next })
+const LoginForm = Schema.Struct({ password: Password, next: Next })
 
 const NextParams = Schema.Struct({ next: Next })
 
@@ -39,8 +39,13 @@ const sessionToken = (request: HttpServerRequest.HttpServerRequest) => {
     : Option.fromUndefinedOr(request.cookies[SESSION_COOKIE])
 }
 
-const safeNext = (next: string | undefined) =>
-  next !== undefined && next.startsWith('/') && !next.startsWith('//') ? next : '/'
+const NEXT_BASE = 'http://hoard.invalid'
+
+export const safeNext = (next: string | undefined) => {
+  const url = next?.startsWith('/') === true ? URL.parse(next, NEXT_BASE) : null
+
+  return url !== null && url.origin === NEXT_BASE ? `${url.pathname}${url.search}${url.hash}` : '/'
+}
 
 const loginPage = Effect.gen(function* () {
   const params = yield* HttpServerRequest.schemaSearchParams(NextParams)

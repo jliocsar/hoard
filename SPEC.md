@@ -332,8 +332,11 @@ use it; no MCP.
 | `upload <file> [--title] [--tag]…` / `download <ref> [-o]`          | Presign → PUT → register in one step; duplicate title is skipped                         |
 | `share <ref> [--ttl 1h\|1d\|7d\|never]` / `unshare <linkId>`        |                                                                                          |
 
-**Pull / push.** Agents never see `version`. `pull` writes `/tmp/hoard/<slug>.md`
-(or `--dir`) plus a sidecar `.<slug>.json` holding `{id, version, base}`. It refuses
+**Pull / push.** Agents never see `version`. `pull` writes
+`$XDG_CACHE_HOME/hoard/<slug>.md` (default `~/.cache/hoard`, or `--dir`) plus a sidecar
+`.<slug>.json` holding `{id, version, base}`. Bodies are decrypted notes, so files are
+`0600`, written via temp file + rename (a symlink in the way is replaced, not followed),
+and the dir must be yours and not writable by other users (`UnsafeDir`, exit 2). It refuses
 to overwrite a file that differs from `base` unless `--force`. `push` sends the
 sidecar's version; on `VersionConflict` it runs `git merge-file local base remote`:
 a clean merge is pushed silently, overlapping edits leave conflict markers in the file

@@ -9,6 +9,15 @@ export interface ArtifactFile {
 }
 
 const INLINE_TEXT: ReadonlySet<string> = new Set(['text/html', 'text/markdown', 'text/plain'])
+
+const SCRIPTABLE: ReadonlySet<string> = new Set([
+  'text/html',
+  'application/xhtml+xml',
+  'image/svg+xml',
+  'text/xml',
+  'application/xml',
+])
+
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const
 
 export const artifactFile = (entry: Entry): ArtifactFile | undefined =>
@@ -36,8 +45,12 @@ export const previewOf = (mime: string): Preview | undefined => {
   return undefined
 }
 
+const baseMime = (mime: string) => mime.split(';')[0]?.trim().toLowerCase() ?? ''
+
 export const opensInline = (mime: string): boolean =>
-  previewOf(mime) !== undefined || INLINE_TEXT.has(mime.split(';')[0]?.trim() ?? '')
+  previewOf(mime) !== undefined || INLINE_TEXT.has(baseMime(mime))
+
+export const runsScripts = (mime: string): boolean => SCRIPTABLE.has(baseMime(mime))
 
 export const contentDisposition = (mime: string, name: string, download: boolean): string =>
   `${download || !opensInline(mime) ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(name)}`

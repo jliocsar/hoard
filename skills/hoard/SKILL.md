@@ -32,12 +32,12 @@ hoard meetings           # today's calendar events, with the slug of each one's 
 You never deal with versions. The CLI keeps track of them in a hidden sidecar file.
 
 ```sh
-hoard pull <ref>                 # writes /tmp/hoard/<slug>.md, prints {slug, path}
+hoard pull <ref>                 # writes ~/.cache/hoard/<slug>.md, prints {slug, path}
 # edit that file with your normal file tools
 hoard push <slug>                # or: push /path/to/<slug>.md
 ```
 
-- Pass `--dir <dir>` to use another folder instead of `/tmp/hoard`. Give the same `--dir` to `push`.
+- Pass `--dir <dir>` to use another folder instead of `~/.cache/hoard` (`$XDG_CACHE_HOME/hoard`). Give the same `--dir` to `push`. The CLI refuses (exit 2, `UnsafeDir`) a folder that's a symlink, belongs to someone else or other users can write to, so don't use `/tmp`.
 - `push` sends the edits you made. If someone changed the entry in the meantime, the CLI merges their changes in:
   - When the edits don't overlap, it pushes the merge. The output has `"merged": true`, and the file now holds the merged text.
   - When they overlap, it exits with **3** and leaves git-style conflict markers (`<<<<<<< local`, `||||||| base`, `=======`, `>>>>>>> remote`) in the file. Resolve them by keeping the right text and deleting the markers, then run `push` again.

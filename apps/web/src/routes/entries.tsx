@@ -25,7 +25,7 @@ import type { Entry, Section } from '../domain.ts'
 import { Entries } from '../services/Entries.ts'
 import { ObjectStore } from '../services/ObjectStore.ts'
 import { ShareLinks } from '../services/ShareLinks.ts'
-import { artifactFile, contentDisposition } from '../artifacts.ts'
+import { artifactFile, contentDisposition, runsScripts } from '../artifacts.ts'
 import { newMeetingNote } from '../meetings.ts'
 import { parseTasks, serializeTasks } from '../tasks.ts'
 import { requestOrigin, requestZone } from '../zone.ts'
@@ -83,7 +83,7 @@ const entryRoute = Effect.gen(function* () {
   Effect.tapError((error) => Effect.logWarning(REJECTED, error.message)),
   Effect.orElseSucceed(() => badRequest),
 )
-const serveArtifact = Effect.fn('serveArtifact')(function* (entry: Entry) {
+const serveArtifact = Effect.fn('serveArtifact')(function* (entry: Entry, shared: boolean) {
   const objects = yield* ObjectStore
   const params = yield* HttpServerRequest.ParsedSearchParams
   const file = artifactFile(entry)
@@ -92,7 +92,8 @@ const serveArtifact = Effect.fn('serveArtifact')(function* (entry: Entry) {
     return notFound(entry.slug)
   }
 
-  const disposition = contentDisposition(file.mime, entry.title, params['download'] !== undefined)
+  const download = params['download'] !== undefined || (shared && runsScripts(file.mime))
+  const disposition = contentDisposition(file.mime, entry.title, download)
 
   return HttpServerResponse.redirect(objects.downloadUrl(file.objectKey, file.mime, disposition), {
     status: 302,
@@ -105,7 +106,7 @@ const artifactRoute = Effect.gen(function* () {
   const slug = yield* slugParam
   const entry = yield* entries.bySlug(slug)
 
-  return yield* serveArtifact(entry)
+  return yield* serveArtifact(entry, false)
 }).pipe(
   Effect.catchTag('EntryNotFound', (error) => Effect.succeed(notFound(error.ref))),
   Effect.tapError((error) => Effect.logWarning(REJECTED, error.message)),
@@ -117,7 +118,7 @@ const sharedRoute = Effect.gen(function* () {
   const params = yield* HttpRouter.schemaPathParams(TokenParams)
   const entry = yield* shares.resolve(params.token)
 
-  return yield* serveArtifact(entry)
+  return yield* serveArtifact(entry, true)
 }).pipe(
   Effect.catchTag('ShareNotFound', () => Effect.succeed(notFound('that'))),
   Effect.tapError((error) => Effect.logWarning(REJECTED, error.message)),

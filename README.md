@@ -43,7 +43,12 @@ hoard CLI / agents ──────────┘           │
   passwords take 2 seconds to answer. Three failures from one IP lock that IP out for
   an hour, even with the right password.
 - **Artifacts are never served from the app's origin.** That way an uploaded `.html`
-  can't run next to your session cookie.
+  can't run next to your session cookie. Share links always download `.html` and `.svg`
+  instead of opening them.
+- **Headers.** Every response has a strict CSP (scripts from the app plus hashed
+  inline ones, media from the app and the bucket, no framing), HSTS, `nosniff` and
+  `X-Frame-Options: DENY`. Remote images in notes render as links, so opening a note
+  doesn't ping anyone.
 
 [SPEC.md](SPEC.md) has the full behaviour and the reasons behind it.
 [DESIGN.md](DESIGN.md) is the visual spec.
@@ -78,8 +83,9 @@ bun run dev                              # http://localhost:3123
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`      | Bucket credentials (Tigris by default)                                                              |
 | `BUCKET_NAME`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION` | Bucket name and endpoint                                                                            |
 
-Optional: `PORT` (default `3123`), `DATABASE_PATH` (default `app.db`) and
-`BACKUP_ENABLED`.
+Optional: `PORT` (default `3123`), `DATABASE_PATH` (default `app.db`),
+`BACKUP_ENABLED` and `PUBLIC_ORIGIN` (e.g. `https://hoard.example.com`; share links and
+the Google redirect URI use it instead of the `Host` header).
 
 Checks:
 
@@ -94,7 +100,7 @@ cd apps/web && bun test
 cd apps/cli && bun run build        # -> apps/cli/dist/hoard
 hoard login --url https://your-host
 hoard list --type note
-hoard pull <slug>                   # edit /tmp/hoard/<slug>.md, then:
+hoard pull <slug>                   # edit ~/.cache/hoard/<slug>.md, then:
 hoard push <slug>
 ```
 

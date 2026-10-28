@@ -16,6 +16,7 @@ import { Api } from './api.ts'
 import { EntryNotFound, TooManyAttempts, WrongPassword, entryRef } from './domain.ts'
 import { ApiRoutes } from './routes/api.ts'
 import { SessionGate } from './routes/auth.tsx'
+import { SecurityHeaders } from './routes/headers.ts'
 import { Auth, MAX_FAILED_LOGINS } from './services/Auth.ts'
 import { Calendar } from './services/Calendar.ts'
 import { Cipher } from './services/Cipher.ts'
@@ -32,6 +33,7 @@ const UNAUTHORIZED = 401
 const bucket = new Map<string, ObjectHead>()
 
 const FakeObjectStore = Layer.succeed(ObjectStore)({
+  origin: 'https://bucket.test',
   newKey: Effect.sync(() => `artifacts/${Bun.randomUUIDv7()}`),
   uploadUrl: (key) => `https://bucket.test/${key}?put`,
   downloadUrl: (key) => `https://bucket.test/${key}?get`,
@@ -67,9 +69,10 @@ const Services = Layer.mergeAll(
 
 const GatedApi = ApiRoutes.pipe(Layer.provide(SessionGate))
 
-const App = HttpRouter.serve(GatedApi, { disableListenLog: true, disableLogger: true }).pipe(
-  Layer.provide(Services),
-)
+const App = HttpRouter.serve(Layer.mergeAll(GatedApi, SecurityHeaders), {
+  disableListenLog: true,
+  disableLogger: true,
+}).pipe(Layer.provide(Services))
 
 const TestServer = App.pipe(Layer.provideMerge(BunHttpServer.layerTest))
 
@@ -156,7 +159,44 @@ describe('auth', () => {
   )
 })
 
+describe('headers', () => {
+  test('responses carry the CSP, with the bucket allowed, and refuse framing', () =>
+    run(
+      Effect.gen(function* () {
+        const response = yield* HttpClient.get('/api/tags')
+        const csp = response.headers['content-security-policy'] ?? ''
+
+        expect(csp).toContain("frame-ancestors 'none'")
+        expect(csp).toContain("script-src 'self' 'sha256-")
+        expect(csp).toContain("img-src 'self' data: blob: https://bucket.test")
+        expect(response.headers['x-frame-options']).toBe('DENY')
+        expect(response.headers['x-content-type-options']).toBe('nosniff')
+      }),
+    ))
+})
+
 describe('entries', () => {
+  test('remote images render as links, local ones as images', () =>
+    run(
+      Effect.gen(function* () {
+        const client = yield* authed
+        const created = yield* client.entries.create({ payload: { type: 'note' } })
+        const saved = yield* client.entries.save({
+          params: { id: created.id },
+          payload: {
+            body: '![pixel](https://tracker.example/p.png) ![](//tracker.example/q.png) ![logo](/assets/icons/favicon.png)',
+            version: created.version,
+          },
+        })
+
+        expect(saved.html).toContain('<a href="https://tracker.example/p.png"')
+        expect(saved.html).toContain('>//tracker.example/q.png</a>')
+        expect(saved.html).toContain('<img src="/assets/icons/favicon.png" alt="logo">')
+        expect(saved.html).not.toContain('<img src="https://')
+        expect(saved.html).not.toContain('<img src="//')
+      }),
+    ))
+
   test('create, get by slug or id, list', () =>
     run(
       Effect.gen(function* () {

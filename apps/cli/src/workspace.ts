@@ -1,3 +1,4 @@
+import * as Config from 'effect/Config'
 import * as Data from 'effect/Data'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
@@ -41,8 +42,20 @@ export interface MergeResult {
 }
 
 const MAX_PUSH_ATTEMPTS = 3
+const PRIVATE_DIR_MODE = 0o700
+const PRIVATE_FILE_MODE = 0o600
+const GROUP_WRITABLE = 0o020
+const WORLD_WRITABLE = 0o002
 
-export const DEFAULT_DIR = '/tmp/hoard'
+export const defaultDir = Effect.gen(function* () {
+  const path = yield* Path.Path
+  const home = yield* Config.string('HOME')
+  const cache = yield* Config.string('XDG_CACHE_HOME').pipe(
+    Config.withDefault(path.join(home, '.cache')),
+  )
+
+  return path.join(cache, 'hoard')
+}).pipe(Effect.orDie)
 
 export const PutResult = Data.taggedEnum<PutResult>()
 
@@ -62,6 +75,11 @@ export class UnpushedChanges extends Schema.TaggedError<UnpushedChanges>()('Unpu
 }) {}
 
 export class ConflictMarkers extends Schema.TaggedError<ConflictMarkers>()('ConflictMarkers', {
+  path: Schema.String,
+  message: Schema.String,
+}) {}
+
+export class UnsafeDir extends Schema.TaggedError<UnsafeDir>()('UnsafeDir', {
   path: Schema.String,
   message: Schema.String,
 }) {}
@@ -89,12 +107,61 @@ const readText = Effect.fn('workspace.readText')(function* (path: string) {
   return Option.none<string>()
 })
 
+const ownedByOtherUser = (info: FileSystem.File.Info) => {
+  const uid = process.getuid?.()
+
+  return uid !== undefined && Option.isSome(info.uid) && info.uid.value !== uid
+}
+
+const writableByOthers = (info: FileSystem.File.Info) => {
+  const gid = process.getgid?.()
+  const foreignGroup = !(Option.isSome(info.gid) && info.gid.value === gid)
+
+  return (info.mode & WORLD_WRITABLE) !== 0 || ((info.mode & GROUP_WRITABLE) !== 0 && foreignGroup)
+}
+
+const unsafeDirReason = (isLink: boolean, info: FileSystem.File.Info) => {
+  if (isLink || info.type !== 'Directory') {
+    return Option.some('is a symlink or not a directory')
+  }
+
+  if (ownedByOtherUser(info)) {
+    return Option.some('belongs to another user')
+  }
+
+  return writableByOthers(info) ? Option.some('is writable by other users') : Option.none()
+}
+
+const checkDir = Effect.fn('workspace.checkDir')(function* (dir: string) {
+  const fs = yield* FileSystem.FileSystem
+  const isLink = yield* Effect.match(fs.readLink(dir), {
+    onFailure: () => false,
+    onSuccess: () => true,
+  })
+  const info = yield* Effect.orDie(fs.stat(dir))
+
+  yield* Option.match(unsafeDirReason(isLink, info), {
+    onNone: () => Effect.void,
+    onSome: (reason) => Effect.fail(new UnsafeDir({ path: dir, message: `${dir} ${reason}` })),
+  })
+})
+
+const preparePullDir = Effect.fn('workspace.preparePullDir')(function* (dir: string) {
+  const fs = yield* FileSystem.FileSystem
+
+  yield* Effect.orDie(fs.makeDirectory(dir, { recursive: true, mode: PRIVATE_DIR_MODE }))
+  yield* checkDir(dir)
+})
+
 const writeText = Effect.fn('workspace.writeText')(function* (file: string, text: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
+  const dir = path.dirname(file)
+  const temp = path.join(dir, `.${path.basename(file)}.${Bun.randomUUIDv7()}.tmp`)
 
-  yield* Effect.orDie(fs.makeDirectory(path.dirname(file), { recursive: true }))
-  yield* Effect.orDie(fs.writeFileString(file, text))
+  yield* Effect.orDie(fs.makeDirectory(dir, { recursive: true, mode: PRIVATE_DIR_MODE }))
+  yield* Effect.orDie(fs.writeFileString(temp, text, { flag: 'wx', mode: PRIVATE_FILE_MODE }))
+  yield* Effect.orDie(fs.rename(temp, file))
 })
 
 const readSidecar = (file: string) =>
@@ -120,6 +187,8 @@ export const pull = Effect.fn('workspace.pull')(function* (
   entry: PulledEntry,
   force: boolean,
 ) {
+  yield* preparePullDir(dir)
+
   const file = yield* entryPath(dir, entry.slug)
 
   if (!force) {
@@ -210,6 +279,8 @@ export const push = Effect.fn('workspace.push')(function* <PutError, PutRequirem
   if (Option.isNone(local) || Option.isNone(sidecar)) {
     return yield* new NotPulled({ path: file, message: 'no pulled copy here; pull it first' })
   }
+
+  yield* checkDir(yield* Effect.map(Path.Path, (path) => path.dirname(file)))
 
   const { id } = sidecar.value
   let body = local.value

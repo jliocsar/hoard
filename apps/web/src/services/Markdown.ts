@@ -27,6 +27,7 @@ const SAFE_HREF = /^(?:https?:\/\/|mailto:|\/|#)/u
 const TASK_PLACEHOLDER = /<li data-task="">/gu
 const INTERNAL_HREF = /^@([\w-]+)$/u
 const INTERNAL_LINK = /<a href="\/e\/([\w-]+)" target="_blank" data-ref>/gu
+const SAME_ORIGIN_PATH = /^\/(?![/\\])/u
 
 const internalSlug = (href: string) => Option.fromUndefinedOr(INTERNAL_HREF.exec(href)?.[1])
 
@@ -85,6 +86,14 @@ export class Markdown extends Context.Service<Markdown, MarkdownShape>()('app/Ma
         onSome: (slug) => `<a href="/e/${slug}" target="_blank" data-ref>${children}</a>`,
       })
 
+    const image = (alt: string, src: string) => {
+      const resolved = src.startsWith('@') ? `/e/${src.slice(1)}` : src
+
+      return SAME_ORIGIN_PATH.test(resolved)
+        ? `<img src="${safeHref(src)}" alt="${escapeAttribute(alt)}">`
+        : `<a href="${safeHref(src)}" target="_blank" rel="noopener noreferrer">${alt === '' ? escapeText(src) : alt}</a>`
+    }
+
     const render = Effect.fn('Markdown.render')(function* (body: string) {
       const markup = numberTasks(
         Bun.markdown.render(
@@ -116,8 +125,7 @@ export class Markdown extends Context.Service<Markdown, MarkdownShape>()('app/Ma
             emphasis: (children) => `<em>${children}</em>`,
             strikethrough: (children) => `<del>${children}</del>`,
             link: (children, meta) => link(children, meta.href),
-            image: (children, meta) =>
-              `<img src="${safeHref(meta.src)}" alt="${escapeAttribute(children)}">`,
+            image: (children, meta) => image(children, meta.src),
           },
           PARSER_OPTIONS,
         ),

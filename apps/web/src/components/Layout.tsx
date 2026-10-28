@@ -50,6 +50,27 @@ const TRANSITION_GATE = `document.addEventListener('htmx:beforeTransition', (eve
   }
 })`
 
+const INTERACTIONS = `(() => {
+  document.addEventListener('click', (event) => {
+    if (event.target instanceof Element && event.target.closest('[data-theme-toggle]')) {
+      window.basecoat.theme.toggle()
+    }
+  })
+  document.addEventListener('change', (event) => {
+    const field = event.target
+    if (field instanceof HTMLInputElement && field.hasAttribute('data-submit-on-change')) {
+      field.form?.requestSubmit()
+    }
+  })
+})()`
+
+export const INLINE_SCRIPTS: readonly string[] = [
+  THEME_BOOT,
+  ZONE_BOOT,
+  TRANSITION_GATE,
+  INTERACTIONS,
+]
+
 export const ThemeToggle = () => (
   <button
     type="button"
@@ -57,7 +78,7 @@ export const ThemeToggle = () => (
     data-variant="ghost"
     data-size="icon"
     aria-label="Toggle dark mode"
-    onclick="window.basecoat.theme.toggle()"
+    data-theme-toggle
   >
     <span class="hidden dark:block">
       <Icon name="sun" class="size-4" />
@@ -119,9 +140,9 @@ export const Layout = (props: {
       <link rel="icon" type="image/png" href="/assets/icons/favicon.png" />
       <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png" />
       <link rel="manifest" href="/assets/manifest.webmanifest" />
-      <script>{raw(THEME_BOOT)}</script>
-      <script>{raw(ZONE_BOOT)}</script>
-      <script>{raw(TRANSITION_GATE)}</script>
+      {INLINE_SCRIPTS.map((script) => (
+        <script>{raw(script)}</script>
+      ))}
       <link rel="stylesheet" href="/assets/app.css" />
       <script src="/vendor/htmx/htmx.min.js" defer />
       <script src="/vendor/basecoat/basecoat.min.js" defer />

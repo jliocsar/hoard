@@ -17,6 +17,7 @@ export interface ObjectHead {
 }
 
 export interface ObjectStoreShape {
+  readonly origin: string
   readonly newKey: Effect.Effect<string>
   readonly uploadUrl: (key: string) => string
   readonly downloadUrl: (key: string, mime: string, disposition: string) => string
@@ -49,6 +50,8 @@ export class ObjectStore extends Context.Service<ObjectStore, ObjectStoreShape>(
         bucket: config.bucket,
         region: 'auto',
       })
+
+      const origin = new URL(client.presign('origin-probe', { expiresIn: 60 })).origin
 
       const newKey = Effect.sync(() => `${ARTIFACT_PREFIX}${Bun.randomUUIDv7()}`)
 
@@ -86,7 +89,15 @@ export class ObjectStore extends Context.Service<ObjectStore, ObjectStoreShape>(
         }),
       )
 
-      return { newKey, uploadUrl, downloadUrl, remove, head, upload } satisfies ObjectStoreShape
+      return {
+        origin,
+        newKey,
+        uploadUrl,
+        downloadUrl,
+        remove,
+        head,
+        upload,
+      } satisfies ObjectStoreShape
     }),
   },
 ) {

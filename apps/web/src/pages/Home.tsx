@@ -55,7 +55,7 @@ const TaskRow = (props: { readonly open: OpenTask }) => (
       type="checkbox"
       class="size-3.5 cursor-pointer accent-foreground"
       aria-label={`Done: ${props.open.task.text}`}
-      onchange="this.form.requestSubmit()"
+      data-submit-on-change
     />
     <span class="title truncate">{props.open.task.text}</span>
     <a class="text-xs text-muted-foreground" href={`/e/${props.open.list.slug}`}>

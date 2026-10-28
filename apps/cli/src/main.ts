@@ -44,7 +44,7 @@ import {
 import type { Entry, EntryRef } from '@hoard/web/domain'
 
 import { authedClient, makeClient, readStored, writeStored } from './client.ts'
-import { DEFAULT_DIR, PutResult, entryPath, pull, push } from './workspace.ts'
+import { PutResult, defaultDir, entryPath, pull, push } from './workspace.ts'
 
 const VERSION = '0.0.1'
 const MAX_RENAME_ATTEMPTS = 3
@@ -147,9 +147,12 @@ const refArgument = Argument.string('ref').pipe(
 )
 
 const dirFlag = Flag.string('dir').pipe(
-  Flag.withDescription('where pulled files live'),
-  Flag.withDefault(DEFAULT_DIR),
+  Flag.withDescription('where pulled files live (default: ~/.cache/hoard)'),
+  Flag.optional,
 )
+
+const resolveDir = (dir: Option.Option<string>) =>
+  Option.match(dir, { onNone: () => defaultDir, onSome: Effect.succeed })
 
 const tagFlag = Flag.string('tag').pipe(Flag.withDescription('repeatable'), Flag.atLeast(0))
 
@@ -199,12 +202,16 @@ const putBody = Effect.fn('putBody')(function* (id: Entry['id'], body: string, v
   )
 })
 
-const pullEntry = Effect.fn('pullEntry')(function* (entry: Entry, dir: string, force: boolean) {
+const pullEntry = Effect.fn('pullEntry')(function* (
+  entry: Entry,
+  dir: Option.Option<string>,
+  force: boolean,
+) {
   if (entry.type === 'artifact') {
     return yield* new UsageError({ message: 'artifacts can’t be pulled; use `download`' })
   }
 
-  return yield* pull(dir, entry, force)
+  return yield* pull(yield* resolveDir(dir), entry, force)
 })
 
 const setTags = Effect.fn('setTags')(function* (entry: Entry, raw: readonly string[]) {
@@ -403,7 +410,7 @@ const pushCommand = Command.make(
     const file =
       target.endsWith('.md') || target.includes('/')
         ? path.resolve(target)
-        : yield* entryPath(dir, target)
+        : yield* entryPath(yield* resolveDir(dir), target)
     const result = yield* push(file, putBody)
 
     return yield* print(PushOutput)(result)
@@ -629,6 +636,8 @@ const program = Command.run(root, { version: VERSION, renderErrors: false }).pip
     UsageError: (error) => exitWith(EXIT.usage, { error: 'UsageError', message: error.message }),
     NotPulled: (error) =>
       exitWith(EXIT.usage, { error: 'NotPulled', message: error.message, path: error.path }),
+    UnsafeDir: (error) =>
+      exitWith(EXIT.usage, { error: 'UnsafeDir', message: error.message, path: error.path }),
     NotAnArtifact: (error) =>
       exitWith(EXIT.usage, {
         error: 'NotAnArtifact',

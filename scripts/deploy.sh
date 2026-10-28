@@ -9,6 +9,11 @@ set -euo pipefail
 
 HOST="${HOARD_HOST:-jc-hoard.exe.xyz}"
 BUN_VERSION="1.4.4"
+# From https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/SHASUMS256.txt.
+# Update them together with BUN_VERSION.
+BUN_SHA256_X64="bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c"
+BUN_SHA256_X64_BASELINE="e0446eb55995772eb9894bebae9a6be368d985a8b9271ee124486f9946eedd76"
+BUN_SHA256_AARCH64="baa6bb36f51d6e58561e02bbea825038a9df454f673d6d776e8bbf86f8c7850e"
 APP_DIR="/opt/hoard"
 ENV_FILE="apps/web/.env"
 
@@ -20,10 +25,30 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 echo "→ provisioning $HOST"
-ssh "$HOST" BUN_VERSION="$BUN_VERSION" APP_DIR="$APP_DIR" bash -s <<'EOF'
+ssh "$HOST" BUN_VERSION="$BUN_VERSION" APP_DIR="$APP_DIR" \
+  BUN_SHA256_X64="$BUN_SHA256_X64" BUN_SHA256_X64_BASELINE="$BUN_SHA256_X64_BASELINE" \
+  BUN_SHA256_AARCH64="$BUN_SHA256_AARCH64" bash -s <<'EOF'
 set -euo pipefail
 if [[ "$(/usr/local/bin/bun --version 2>/dev/null || true)" != "$BUN_VERSION" ]]; then
-  curl -fsSL https://bun.sh/install | sudo BUN_INSTALL=/usr/local bash -s "bun-v$BUN_VERSION" >/dev/null
+  case "$(uname -m)" in
+    x86_64)
+      if grep -q avx2 /proc/cpuinfo; then
+        target=bun-linux-x64 sha="$BUN_SHA256_X64"
+      else
+        target=bun-linux-x64-baseline sha="$BUN_SHA256_X64_BASELINE"
+      fi
+      ;;
+    aarch64 | arm64) target=bun-linux-aarch64 sha="$BUN_SHA256_AARCH64" ;;
+    *) echo "no pinned Bun build for $(uname -m)" >&2; exit 1 ;;
+  esac
+  work="$(mktemp -d)"
+  trap 'rm -rf "$work"' EXIT
+  curl -fsSL -o "$work/bun.zip" \
+    "https://github.com/oven-sh/bun/releases/download/bun-v$BUN_VERSION/$target.zip"
+  echo "$sha  $work/bun.zip" | sha256sum -c --quiet
+  unzip -q "$work/bun.zip" -d "$work"
+  sudo install -m 755 "$work/$target/bun" /usr/local/bin/bun
+  sudo ln -sf bun /usr/local/bin/bunx
 fi
 if ! id hoard >/dev/null 2>&1; then
   sudo useradd --system --home-dir /var/lib/hoard --shell /usr/sbin/nologin hoard

@@ -1,3 +1,4 @@
+import * as Config from 'effect/Config'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
@@ -15,12 +16,23 @@ export const requestZone = Effect.map(HttpServerRequest.HttpServerRequest, (requ
   ),
 )
 
-export const requestOrigin = Effect.map(HttpServerRequest.HttpServerRequest, (request) => {
-  const proto = request.headers['x-forwarded-proto'] ?? 'http'
+const PublicOrigin = Config.option(Config.string('PUBLIC_ORIGIN'))
+
+const LOCAL_HOST = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/u
+
+export const requestOrigin = Effect.gen(function* () {
+  const configured = yield* PublicOrigin
+
+  if (Option.isSome(configured)) {
+    return new URL(configured.value).origin
+  }
+
+  const request = yield* HttpServerRequest.HttpServerRequest
   const host = request.headers['host'] ?? 'localhost'
+  const proto = request.headers['x-forwarded-proto'] ?? (LOCAL_HOST.test(host) ? 'http' : 'https')
 
   return `${proto}://${host}`
-})
+}).pipe(Effect.orDie)
 
 export const requestClient = Effect.map(HttpServerRequest.HttpServerRequest, (request) => {
   const forwarded = request.headers['x-forwarded-for']?.split(',').at(-1)?.trim()

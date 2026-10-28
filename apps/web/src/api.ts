@@ -138,7 +138,11 @@ export const RegisterResponse = Schema.Struct({
   rejected: Schema.Array(Schema.String),
 })
 
-export const LoginRequest = Schema.Struct({ password: Schema.String })
+export const PASSWORD_MAX_LENGTH = 1024
+
+export const Password = Schema.String.check(Schema.isMaxLength(PASSWORD_MAX_LENGTH))
+
+export const LoginRequest = Schema.Struct({ password: Password })
 
 export const LoginResponse = Schema.Struct({ token: Schema.String })
 
