@@ -30,7 +30,25 @@ const ZONE_BOOT = `(() => {
   }
 })()`
 
-const HTMX_CONFIG = '{"historyCacheSize":0}'
+const HTMX_CONFIG = '{"historyCacheSize":0,"globalViewTransitions":true}'
+
+const TRANSITION_GATE = `document.addEventListener('htmx:beforeTransition', (event) => {
+  const info = event.detail
+  const request = info.requestConfig
+  const trigger = request && request.triggeringEvent
+  const pointer = trigger instanceof MouseEvent && trigger.detail > 0
+  const to = info.pathInfo && new URL(info.pathInfo.requestPath, location.href)
+  const samePage = to && to.pathname === location.pathname
+  const archive = samePage && to.searchParams.has('archived') !== new URLSearchParams(location.search).has('archived')
+  if (archive) {
+    document.documentElement.dataset.archive = to.searchParams.has('archived') ? 'in' : 'out'
+  } else {
+    delete document.documentElement.dataset.archive
+  }
+  if (!info.boosted || request.verb !== 'get' || !pointer || (samePage && !archive)) {
+    event.preventDefault()
+  }
+})`
 
 export const ThemeToggle = () => (
   <button
@@ -103,6 +121,7 @@ export const Layout = (props: {
       <link rel="manifest" href="/assets/manifest.webmanifest" />
       <script>{raw(THEME_BOOT)}</script>
       <script>{raw(ZONE_BOOT)}</script>
+      <script>{raw(TRANSITION_GATE)}</script>
       <link rel="stylesheet" href="/assets/app.css" />
       <script src="/vendor/htmx/htmx.min.js" defer />
       <script src="/vendor/basecoat/basecoat.min.js" defer />

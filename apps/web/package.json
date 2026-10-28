@@ -39,6 +39,7 @@
     "effect": "4.0.0-rc.112",
     "htmx.org": "^2.0.10",
     "motion": "^13.4.0",
+    "number-flow": "^0.6.2",
     "shiki": "^4.4.3"
   },
   "devDependencies": {

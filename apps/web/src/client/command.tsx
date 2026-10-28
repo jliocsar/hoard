@@ -172,20 +172,27 @@ const run = Effect.fn('runCommand')(function* (palette: Palette) {
     Effect.catchCause((cause) => Effect.logWarning('command targets failed', cause)),
   )
 
-  const open = Effect.gen(function* () {
-    yield* Ref.update(state, (current) => ({ ...IDLE, targets: current.targets }))
-    palette.input.value = ''
-    palette.dialog.showModal()
-    palette.input.focus()
-    yield* show
-    yield* Effect.forkScoped(load)
-  })
+  const open = (pointer: boolean) =>
+    Effect.gen(function* () {
+      yield* Ref.update(state, (current) => ({ ...IDLE, targets: current.targets }))
+      palette.input.value = ''
+      palette.dialog.toggleAttribute('data-pointer', pointer)
+      palette.dialog.showModal()
+      palette.input.focus()
+      yield* show
+      yield* Effect.forkScoped(load)
+    })
 
   const close = Effect.sync(() => {
+    palette.dialog.removeAttribute('data-pointer')
     palette.dialog.close()
   })
 
-  const toggle = Effect.suspend(() => (palette.dialog.open ? close : open))
+  const dismiss = Effect.sync(() => {
+    palette.dialog.close()
+  })
+
+  const toggle = Effect.suspend(() => (palette.dialog.open ? close : open(false)))
 
   const select = (index: number) =>
     Effect.flatMap(
@@ -240,7 +247,9 @@ const run = Effect.fn('runCommand')(function* (palette: Palette) {
   )
 
   const opens = capture(document, 'click', (event) =>
-    Option.map(closestData(event.target, 'search'), () => claim(event, open)),
+    Option.map(closestData(event.target, 'search'), () =>
+      claim(event, open(event instanceof MouseEvent && event.detail > 0)),
+    ),
   )
 
   const keys = capture(palette.dialog, 'keydown', (event) =>
@@ -252,7 +261,7 @@ const run = Effect.fn('runCommand')(function* (palette: Palette) {
 
   const clicks = capture(palette.dialog, 'mousedown', (event) =>
     event.target === palette.dialog
-      ? Option.some(close)
+      ? Option.some(dismiss)
       : Option.map(
           Option.orElse(
             Option.map(closestData(event.target, 'index'), (index) => goIndex(Number(index))),

@@ -185,20 +185,59 @@ fill, `--foreground` text, `0 1px 2px rgba(0,0,0,.08), 0 0 0 1px --border`
 ## Motion
 
 Frequency rule first: opening a note, going back, switching Source/Preview and
-creating a note all happen many times a day, so they swap instantly. No
-entrance, no stagger, no page fade.
+creating a note all happen many times a day, so they stay fast. No entrance,
+no stagger. Anything driven by the keyboard swaps instantly.
+
+The one exception is page navigation by pointer ("Relay"). It's a View Transition that htmx runs
+around the boosted swap, and `TRANSITION_GATE` in `Layout.tsx` cancels it for
+anything that isn't a mouse or touch click on a link to another page: keyboard
+Enter, `n`, form posts, history restores and partial swaps all skip it. Crumbs,
+title and meta swap instantly. Only `.page-body` (everything under the meta
+rule) hands off, with no overlap:
+
+- old: `opacity → 0`, `blur(2px)`, `scale(1.006)`, 90ms `ease-out`
+- new: from `opacity 0`, `blur(3px)`, `scale(0.992)`, 200ms `--ease-out`,
+  delayed 90ms. Transform origin is top center.
+
+Three smaller surfaces move too ("Blend"):
+
+- Popovers (`.pop-panel`: tags filter, note tags, share, meeting) grow out
+  of the corner of their trigger: from `scale(0.95)` and `opacity 0`, 160ms
+  `--ease-out`. They close to `scale(0.98)` in 100ms `ease-out`.
+- The Archived toggle, by pointer, slides the list as if the archive sits just
+  to its right. Turning it on: old `translateX(-10px)` + fade in 90ms, new
+  from `translateX(14px)` in 200ms `--ease-out`, delayed 70ms. Turning it off
+  mirrors it. `TRANSITION_GATE` marks `<html data-archive="in|out">` and lets
+  this one same-page swap through. Any other same-page swap stays instant.
+- The command palette stays instant from the keyboard (ctrl k, esc). Opened
+  by clicking `jump anywhere` (`command.tsx` sets `data-pointer`), it grows
+  from the top, `scale(0.96)` to 1 in 180ms `--ease-out`. A backdrop click
+  shrinks it to `scale(0.98)` in 110ms.
+- Counts marked `data-count="<key>"` (today: the entry count on the list
+  pages) roll their digits to the new value with NumberFlow
+  (`client/counts.ts`): 300ms `--ease-out`, opacity 150ms. Only when a pointer
+  action swaps the same page (e.g. the Archived toggle) and the count under
+  the same key changed. To add one, wrap the bare number in
+  `<span data-count="some-key">`.
 
 What does animate, and only these:
 
-| what                       | property                           | duration  | easing       |
-| -------------------------- | ---------------------------------- | --------- | ------------ |
-| button / tab press         | `transform: scale(0.97)`           | 140ms     | `--ease-out` |
-| button hover               | `background-color`, `border-color` | 140ms     | `ease`       |
-| row hover                  | `background-color`                 | 120ms     | `ease`       |
-| back link, tab, text hover | `color`                            | 120–140ms | `ease`       |
-| status text swap           | `opacity`                          | 200ms     | `ease`       |
+| what                       | property                           | duration    | easing       |
+| -------------------------- | ---------------------------------- | ----------- | ------------ |
+| button / tab press         | `transform: scale(0.97)`           | 140ms       | `--ease-out` |
+| button hover               | `background-color`, `border-color` | 140ms       | `ease`       |
+| row hover                  | `background-color`                 | 120ms       | `ease`       |
+| back link, tab, text hover | `color`                            | 120–140ms   | `ease`       |
+| status text swap           | `opacity`                          | 200ms       | `ease`       |
+| page content (pointer nav) | `opacity`, `filter`, `transform`   | 90 + 200ms  | see above    |
+| popovers                   | `opacity`, `transform`             | 160 / 100ms | see above    |
+| Archived toggle (pointer)  | `opacity`, `transform`             | 90 + 200ms  | see above    |
+| counts (`[data-count]`)    | digit roll (NumberFlow)            | 300ms       | `--ease-out` |
+| palette (pointer-opened)   | `opacity`, `scale`                 | 180 / 110ms | see above    |
 
-`prefers-reduced-motion: reduce` disables all of the above. Hover styles are
+`prefers-reduced-motion: reduce` disables all of the above, except that page
+navigation and the Archived toggle become a plain 150ms content fade, and
+popovers and the pointer-opened palette keep their fade but don't scale. Hover styles are
 gated behind `(hover: hover) and (pointer: fine)`.
 
 ## Keyboard

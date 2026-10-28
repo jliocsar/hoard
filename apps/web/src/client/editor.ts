@@ -24,6 +24,7 @@ import { MAX_VISIBLE_TAGS } from '../tags.ts'
 import { serializeTasks } from '../tasks.ts'
 import type { Task } from '../tasks.ts'
 import { mountCommand } from './command.tsx'
+import { mountCounts } from './counts.ts'
 import { capture, editorHost, inputsHost, mountMentions, swallow } from './mentions.tsx'
 import { mountUpload, reportUploads } from './upload.ts'
 
@@ -771,6 +772,7 @@ const main = Effect.gen(function* () {
   const remount = FiberHandle.run(editors, Effect.scoped(mountAll))
 
   yield* remount
+  yield* mountCounts
   yield* Effect.forkScoped(shortcuts)
   yield* Effect.forkScoped(
     Stream.fromEventListener(window, 'resize').pipe(Stream.runForEach(() => refold)),

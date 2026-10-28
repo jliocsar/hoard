@@ -25,7 +25,7 @@ const TAG_CHIP =
   'inline-flex h-8 shrink-0 snap-start items-center gap-1.5 rounded-full border px-3 text-xs font-medium whitespace-nowrap text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground'
 
 export const TAG_PANEL = [
-  'fixed inset-auto m-0 w-[240px] rounded-lg border bg-background p-0 text-[14px] shadow-lg',
+  'pop-panel fixed inset-auto m-0 w-[240px] rounded-lg border bg-background p-0 text-[14px] shadow-lg',
   '[position-anchor:--tags] [top:calc(anchor(bottom)+6px)] [position-try-fallbacks:flip-inline]',
 ].join(' ')
 
@@ -95,7 +95,7 @@ export const TagMenu = (props: TagFilter) => (
     <div
       id="tag-menu"
       popover
-      class={`${TAG_PANEL} [left:anchor(left)]`}
+      class={`${TAG_PANEL} origin-top-left [left:anchor(left)]`}
       data-tag-menu
       data-tag-filter={listHref(props.section, props.archived, [])}
       hx-push-url="true"

@@ -79,13 +79,13 @@ const TITLE_INPUT = 'w-full bg-transparent outline-none placeholder:text-muted-f
 const NEW_BUTTON = 'btn ml-auto border-transparent'
 
 const SHARE_PANEL = [
-  'fixed inset-auto m-0 w-[400px] max-w-[calc(100vw-2rem)] rounded-lg border bg-background p-1 text-xs text-muted-foreground shadow-lg',
-  '[position-anchor:--share] [top:calc(anchor(bottom)+6px)] [right:anchor(right)] [position-try-fallbacks:flip-inline]',
+  'pop-panel fixed inset-auto m-0 w-[400px] max-w-[calc(100vw-2rem)] rounded-lg border bg-background p-1 text-xs text-muted-foreground shadow-lg',
+  'origin-top-right [position-anchor:--share] [top:calc(anchor(bottom)+6px)] [right:anchor(right)] [position-try-fallbacks:flip-inline]',
 ].join(' ')
 
 const MEETING_PANEL = [
-  'fixed inset-auto m-0 w-[360px] max-w-[calc(100vw-2rem)] rounded-lg border bg-background p-1 text-xs text-muted-foreground shadow-lg',
-  '[position-anchor:--meeting] [top:calc(anchor(bottom)+6px)] [right:anchor(right)] [position-try-fallbacks:flip-inline]',
+  'pop-panel fixed inset-auto m-0 w-[360px] max-w-[calc(100vw-2rem)] rounded-lg border bg-background p-1 text-xs text-muted-foreground shadow-lg',
+  'origin-top-right [position-anchor:--meeting] [top:calc(anchor(bottom)+6px)] [right:anchor(right)] [position-try-fallbacks:flip-inline]',
 ].join(' ')
 
 const SHARE_ROW =
@@ -165,7 +165,9 @@ export const Page = (props: {
     <div class="mb-4 flex min-h-[42px] flex-wrap sm:mb-6 items-center gap-x-2.5 gap-y-1 border-b py-1.5 text-xs whitespace-nowrap text-muted-foreground sm:py-0">
       {props.meta}
     </div>
-    {props.children}
+    <div class={props.fill === true ? 'page-body flex flex-1 flex-col' : 'page-body'}>
+      {props.children}
+    </div>
   </main>
 )
 
@@ -318,7 +320,7 @@ export const ListPage = Effect.fn('ListPage')(function* (props: {
               </span>
             )}
             <span>
-              {listed.length} {props.section.noun}
+              <span data-count="entries">{listed.length}</span> {props.section.noun}
               {listed.length === 1 ? '' : 's'}
             </span>
             <span class="hidden items-center gap-2.5 sm:flex">
@@ -647,7 +649,12 @@ export const TagsFragment = (props: {
 )
 
 const TagsPanel = (props: { readonly entry: Entry; readonly options: readonly Tag[] }) => (
-  <div id="tags-panel" popover class={`${TAG_PANEL} [right:anchor(right)]`} data-tag-menu>
+  <div
+    id="tags-panel"
+    popover
+    class={`${TAG_PANEL} origin-top-right [right:anchor(right)]`}
+    data-tag-menu
+  >
     <form
       hx-post={`/e/${props.entry.slug}/tags`}
       hx-target="#tag-options"
