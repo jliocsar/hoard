@@ -1,6 +1,16 @@
 import { Layout } from '../components/Layout.tsx'
 
-export const LoginPage = (props: { readonly next: string; readonly failed: boolean }) => (
+export type LoginFailure = 'wrong-password' | 'too-many-attempts'
+
+const FAILURE_MESSAGE = {
+  'wrong-password': 'Wrong password',
+  'too-many-attempts': 'Too many attempts. Try again in an hour',
+} satisfies Record<LoginFailure, string>
+
+export const LoginPage = (props: {
+  readonly next: string
+  readonly failure: LoginFailure | null
+}) => (
   <Layout title="Sign in" guest>
     <main class="flex min-h-dvh items-center justify-center px-4">
       <form
@@ -19,11 +29,13 @@ export const LoginPage = (props: { readonly next: string; readonly failed: boole
           name="password"
           placeholder="Password"
           autocomplete="current-password"
-          aria-invalid={props.failed}
+          aria-invalid={props.failure !== null}
           autofocus
           required
         />
-        {props.failed ? <p class="text-xs text-muted-foreground">Wrong password</p> : null}
+        {props.failure === null ? null : (
+          <p class="text-xs text-muted-foreground">{FAILURE_MESSAGE[props.failure]}</p>
+        )}
         <button type="submit" class="btn w-full">
           Sign in
         </button>

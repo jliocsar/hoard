@@ -162,6 +162,8 @@ export class EventNotFound extends Schema.TaggedError<EventNotFound>()('EventNot
 
 export class WrongPassword extends Schema.TaggedError<WrongPassword>()('WrongPassword', {}) {}
 
+export class TooManyAttempts extends Schema.TaggedError<TooManyAttempts>()('TooManyAttempts', {}) {}
+
 export class VersionConflict extends Schema.TaggedError<VersionConflict>()('VersionConflict', {
   entry: Entry,
 }) {}

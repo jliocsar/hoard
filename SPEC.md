@@ -374,7 +374,8 @@ markers, unpushed-changes guard).
   string — in `.env` every `$` must be written `\$` because bun expands `$name`
   even inside quotes — and `SESSION_SECRET` signs the `session` cookie
   (`HttpOnly; Secure; SameSite=Lax`, one year, `{issuedAt}.{hmac}` so rotating the
-  secret logs everything out). Wrong passwords wait two seconds before answering.
+  secret logs everything out). Wrong passwords wait two seconds before answering, and
+  three failed logins from one address lock that address out for an hour.
 - Secrets: Google OAuth client, token encryption key, session signing key, Tigris creds.
 - Google scope: `calendar.readonly`. That's the only one.
 - Backup: `services/Backup.ts`: hourly `VACUUM INTO` uploaded to the artifacts bucket
@@ -419,6 +420,12 @@ live here.
 - `apps/web/src/api.ts` is shared with the CLI: it may import `domain.ts` and `effect`,
   never a service, or server code ends up in the binary.
 - `/api/auth/login` is the one `/api` route `SessionGate` lets through.
+- Login lockout: `Auth` keeps failed attempts per client address in memory (a restart
+  forgets them). An attempt is recorded before the password is checked, so concurrent
+  guesses can't slip past the limit, and a locked-out address is refused even with the
+  right password. A success clears that address. The address is the **last**
+  `X-Forwarded-For` entry, the one exe.dev's proxy appends, because a client can forge
+  everything before it. Per address, not global, so a stranger can't lock the owner out.
 - Home's calendar is stale-while-revalidate: the last fetched HTML paints at once from
   `sessionStorage` (so event titles don't outlive the session), fresh HTML replaces it.
   It's fetched after the page paints so Google's latency never blocks Home.

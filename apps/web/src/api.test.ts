@@ -13,10 +13,10 @@ import * as HttpRouter from 'effect/unstable/http/HttpRouter'
 import * as HttpApiClient from 'effect/unstable/httpapi/HttpApiClient'
 
 import { Api } from './api.ts'
-import { EntryNotFound, WrongPassword, entryRef } from './domain.ts'
+import { EntryNotFound, TooManyAttempts, WrongPassword, entryRef } from './domain.ts'
 import { ApiRoutes } from './routes/api.ts'
 import { SessionGate } from './routes/auth.tsx'
-import { Auth } from './services/Auth.ts'
+import { Auth, MAX_FAILED_LOGINS } from './services/Auth.ts'
 import { Calendar } from './services/Calendar.ts'
 import { Cipher } from './services/Cipher.ts'
 import { DatabaseLayer } from './services/Database.ts'
@@ -89,6 +89,13 @@ const authed = Effect.gen(function* () {
   })
 })
 
+const from = (address: string) =>
+  HttpApiClient.make(Api, {
+    transformClient: HttpClient.mapRequest(
+      HttpClientRequest.setHeader('x-forwarded-for', `203.0.113.9, ${address}`),
+    ),
+  })
+
 const responseStatus = (error: HttpClientError.HttpClientError) =>
   Match.value(error.reason).pipe(
     Match.tag('StatusCodeError', 'DecodeError', 'EmptyBodyError', (reason) =>
@@ -122,6 +129,31 @@ describe('auth', () => {
         expect(error).toBeInstanceOf(WrongPassword)
       }),
     ))
+
+  test(
+    'too many wrong passwords lock out that address, and only that address',
+    () =>
+      run(
+        Effect.gen(function* () {
+          const guesser = yield* from('198.51.100.1')
+          const owner = yield* from('198.51.100.2')
+
+          yield* Effect.all(
+            Array.from({ length: MAX_FAILED_LOGINS }, () =>
+              Effect.flip(guesser.auth.login({ payload: { password: 'no' } })),
+            ),
+            { concurrency: 'unbounded' },
+          )
+
+          const locked = yield* Effect.flip(guesser.auth.login({ payload: { password: PASSWORD } }))
+          const { token } = yield* owner.auth.login({ payload: { password: PASSWORD } })
+
+          expect(locked).toBeInstanceOf(TooManyAttempts)
+          expect(token).toContain('.')
+        }),
+      ),
+    10_000,
+  )
 })
 
 describe('entries', () => {

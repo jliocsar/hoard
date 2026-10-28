@@ -10,6 +10,7 @@ import { LOGIN_PATH } from '../api.ts'
 import { LoginPage } from '../pages/Login.tsx'
 import { respond } from '../render.ts'
 import { Auth, SESSION_TTL } from '../services/Auth.ts'
+import { requestClient } from '../zone.ts'
 
 const SESSION_COOKIE = 'session'
 
@@ -44,26 +45,33 @@ const safeNext = (next: string | undefined) =>
 const loginPage = Effect.gen(function* () {
   const params = yield* HttpServerRequest.schemaSearchParams(NextParams)
 
-  return respond(LoginPage({ next: safeNext(params.next), failed: false }), 200)
-}).pipe(Effect.orElseSucceed(() => respond(LoginPage({ next: '/', failed: false }), 200)))
+  return respond(LoginPage({ next: safeNext(params.next), failure: null }), 200)
+}).pipe(Effect.orElseSucceed(() => respond(LoginPage({ next: '/', failure: null }), 200)))
 
 const loginSubmit = Effect.gen(function* () {
   const auth = yield* Auth
   const form = yield* HttpServerRequest.schemaBodyUrlParams(LoginForm)
   const next = safeNext(form.next)
-  const token = yield* auth.login(form.password)
+  const client = yield* requestClient
 
-  return yield* Option.match(token, {
-    onNone: () => Effect.succeed(respond(LoginPage({ next, failed: true }), 401)),
-    onSome: (value) =>
-      HttpServerResponse.setCookie(seeOther(next), SESSION_COOKIE, value, {
-        ...COOKIE_OPTIONS,
-        maxAge: SESSION_TTL,
+  return yield* auth.login(form.password, client).pipe(
+    Effect.flatMap(
+      Option.match({
+        onNone: () => Effect.succeed(respond(LoginPage({ next, failure: 'wrong-password' }), 401)),
+        onSome: (value) =>
+          HttpServerResponse.setCookie(seeOther(next), SESSION_COOKIE, value, {
+            ...COOKIE_OPTIONS,
+            maxAge: SESSION_TTL,
+          }),
       }),
-  })
+    ),
+    Effect.catchTag('TooManyAttempts', () =>
+      Effect.succeed(respond(LoginPage({ next, failure: 'too-many-attempts' }), 429)),
+    ),
+  )
 }).pipe(
   Effect.tapError((error) => Effect.logWarning('rejected login request', error.message)),
-  Effect.orElseSucceed(() => respond(LoginPage({ next: '/', failed: false }), 400)),
+  Effect.orElseSucceed(() => respond(LoginPage({ next: '/', failure: null }), 400)),
 )
 
 const logout = HttpServerResponse.expireCookie(

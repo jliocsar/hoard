@@ -660,6 +660,11 @@ const program = Command.run(root, { version: VERSION, renderErrors: false }).pip
       }),
     NotLoggedIn: (error) => exitWith(EXIT.auth, { error: 'NotLoggedIn', message: error.message }),
     WrongPassword: () => exitWith(EXIT.auth, { error: 'WrongPassword', message: 'wrong password' }),
+    TooManyAttempts: () =>
+      exitWith(EXIT.auth, {
+        error: 'TooManyAttempts',
+        message: 'too many failed logins from this address; try again in an hour',
+      }),
     HttpClientError: (error) =>
       Option.contains(responseStatus(error), UNAUTHORIZED)
         ? exitWith(EXIT.auth, {

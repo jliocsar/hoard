@@ -21,6 +21,7 @@ import {
   ShareTtl,
   Tag,
   TagCount,
+  TooManyAttempts,
   VersionConflict,
   WrongPassword,
 } from './domain.ts'
@@ -149,7 +150,10 @@ export class AuthApi extends HttpApiGroup.make('auth')
     HttpApiEndpoint.post('login', '/login', {
       payload: LoginRequest,
       success: LoginResponse,
-      error: WrongPassword.pipe(HttpApiSchema.status(401)),
+      error: [
+        WrongPassword.pipe(HttpApiSchema.status(401)),
+        TooManyAttempts.pipe(HttpApiSchema.status(429)),
+      ],
     }),
   )
   .prefix('/auth') {}

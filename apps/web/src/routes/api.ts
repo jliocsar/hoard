@@ -14,7 +14,7 @@ import type { ArtifactInput } from '../services/Entries.ts'
 import { Markdown } from '../services/Markdown.ts'
 import { ARTIFACT_PREFIX, ObjectStore } from '../services/ObjectStore.ts'
 import { ShareLinks } from '../services/ShareLinks.ts'
-import { requestOrigin, requestZone } from '../zone.ts'
+import { requestClient, requestOrigin, requestZone } from '../zone.ts'
 
 const FALLBACK_MIME = 'application/octet-stream'
 
@@ -35,7 +35,7 @@ const AuthHandlers = HttpApiBuilder.group(
 
     return handlers.handle('login', ({ payload }) =>
       Effect.flatMap(
-        auth.login(payload.password),
+        Effect.flatMap(requestClient, (client) => auth.login(payload.password, client)),
         Option.match({
           onNone: () => Effect.fail(new WrongPassword()),
           onSome: (token) => Effect.succeed({ token }),

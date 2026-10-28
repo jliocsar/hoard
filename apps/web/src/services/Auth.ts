@@ -8,13 +8,20 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Redacted from 'effect/Redacted'
 
+import { TooManyAttempts } from '../domain.ts'
+
 export interface AuthShape {
-  readonly login: (password: string) => Effect.Effect<Option.Option<string>>
+  readonly login: (
+    password: string,
+    client: string,
+  ) => Effect.Effect<Option.Option<string>, TooManyAttempts>
   readonly verify: (token: string) => Effect.Effect<boolean>
 }
 
 const FAILED_LOGIN_DELAY = Duration.seconds(2)
 
+export const MAX_FAILED_LOGINS = 3
+export const LOCKOUT_WINDOW = Duration.hours(1)
 export const SESSION_TTL = Duration.days(365)
 
 const sign = (secret: string, issuedAt: string) =>
@@ -44,12 +51,45 @@ export class Auth extends Context.Service<Auth, AuthShape>()('app/Auth', {
       return `${issuedAt}.${sign(secret, issuedAt)}`
     })
 
-    const login = Effect.fn('Auth.login')(function* (password: string) {
+    const attempts = new Map<string, number[]>()
+
+    const recent = (client: string, now: number) => {
+      const since = now - Duration.toMillis(LOCKOUT_WINDOW)
+
+      for (const [key, times] of attempts) {
+        const kept = times.filter((at) => at > since)
+
+        if (kept.length === 0) {
+          attempts.delete(key)
+        } else {
+          attempts.set(key, kept)
+        }
+      }
+
+      return attempts.get(client) ?? []
+    }
+
+    const login = Effect.fn('Auth.login')(function* (password: string, client: string) {
+      const now = DateTime.toEpochMillis(yield* DateTime.now)
+      const tried = recent(client, now)
+
+      if (tried.length >= MAX_FAILED_LOGINS) {
+        yield* Effect.logWarning('login locked out', client)
+
+        return yield* new TooManyAttempts()
+      }
+
+      attempts.set(client, [...tried, now])
+
       const matches = yield* Effect.promise(() => Bun.password.verify(password, passwordHash))
 
       if (matches) {
+        attempts.delete(client)
+
         return Option.some(yield* issue)
       }
+
+      yield* Effect.logWarning('wrong password', client)
 
       yield* Effect.sleep(FAILED_LOGIN_DELAY)
 

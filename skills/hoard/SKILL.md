@@ -80,14 +80,14 @@ When an artifact with that title already exists, `upload` prints `"skipped": tru
 
 ## Exit codes
 
-| code | meaning                                               | what to do                        |
-| ---- | ----------------------------------------------------- | --------------------------------- |
-| 0    | ok                                                    |                                   |
-| 1    | unexpected (network, server)                          | report it                         |
-| 2    | bad usage (flag, tag or type), or pulling an artifact | fix the command                   |
-| 3    | conflict markers were written into the file           | resolve them, then `push` again   |
-| 4    | entry or calendar event not found                     | check the ref with `list --title` |
-| 5    | unpushed local edits would be overwritten             | `push` first                      |
-| 6    | not logged in, or the token was rejected              | ask the user to run `hoard login` |
+| code | meaning                                                          | what to do                                                      |
+| ---- | ---------------------------------------------------------------- | --------------------------------------------------------------- |
+| 0    | ok                                                               |                                                                 |
+| 1    | unexpected (network, server)                                     | report it                                                       |
+| 2    | bad usage (flag, tag or type), or pulling an artifact            | fix the command                                                 |
+| 3    | conflict markers were written into the file                      | resolve them, then `push` again                                 |
+| 4    | entry or calendar event not found                                | check the ref with `list --title`                               |
+| 5    | unpushed local edits would be overwritten                        | `push` first                                                    |
+| 6    | not logged in, the token was rejected, or too many failed logins | ask the user to run `hoard login` (after a lockout, in an hour) |
 
 Login asks for a password, so it's the user's job. Never try to log in yourself.

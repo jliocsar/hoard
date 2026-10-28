@@ -22,6 +22,14 @@ export const requestOrigin = Effect.map(HttpServerRequest.HttpServerRequest, (re
   return `${proto}://${host}`
 })
 
+export const requestClient = Effect.map(HttpServerRequest.HttpServerRequest, (request) => {
+  const forwarded = request.headers['x-forwarded-for']?.split(',').at(-1)?.trim()
+
+  return forwarded !== undefined && forwarded !== ''
+    ? forwarded
+    : Option.getOrElse(request.remoteAddress, () => 'unknown')
+})
+
 export const clock = (at: DateTime.Utc, zone: DateTime.TimeZone) =>
   DateTime.format(DateTime.setZone(at, zone), {
     locale: 'en-GB',
