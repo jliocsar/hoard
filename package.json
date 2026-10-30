@@ -9,10 +9,10 @@
   "scripts": {
     "dev": "bun run --filter '@hoard/web' dev",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint --deny-warnings",
-    "lint:fix": "oxlint --fix --deny-warnings",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check",
+    "lint": "oxlint --deny-warnings --disable-nested-config",
+    "lint:fix": "oxlint --fix --deny-warnings --disable-nested-config",
+    "fmt": "oxfmt --disable-nested-config",
+    "fmt:check": "oxfmt --check --disable-nested-config",
     "prepare": "effect-tsgo patch --oxlint",
     "deploy": "scripts/deploy.sh"
   },
