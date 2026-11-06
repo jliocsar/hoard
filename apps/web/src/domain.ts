@@ -160,6 +160,12 @@ export class EventNotFound extends Schema.TaggedError<EventNotFound>()('EventNot
   eventId: Schema.String,
 }) {}
 
+export class SealFailed extends Schema.TaggedError<SealFailed>()('SealFailed', {}) {
+  override get message() {
+    return 'Could not encrypt the value, so nothing was saved. Try again, and check the server log if it keeps failing.'
+  }
+}
+
 export class WrongPassword extends Schema.TaggedError<WrongPassword>()('WrongPassword', {}) {}
 
 export class TooManyAttempts extends Schema.TaggedError<TooManyAttempts>()('TooManyAttempts', {}) {}

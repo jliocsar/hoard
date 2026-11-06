@@ -1,82 +1,117 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import * as Config from 'effect/Config'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Redacted from 'effect/Redacted'
-import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
 import * as SchemaGetter from 'effect/SchemaGetter'
 import * as SchemaIssue from 'effect/SchemaIssue'
+import * as Aead from 'effect/crypto/Aead'
+import * as SecureRandom from 'effect/crypto/SecureRandom'
 
 import type { Entry as DomainEntry } from '../domain.ts'
-import { entryFields, ENTRY_KEYS } from '../domain.ts'
+import { entryFields, ENTRY_KEYS, SealFailed } from '../domain.ts'
 
 export interface CipherShape {
-  readonly seal: (plain: string) => string
+  readonly seal: (plain: string) => Effect.Effect<string, SealFailed>
+  readonly open: (stored: string) => Effect.Effect<string, UnsealFailed>
   readonly isSealed: (stored: string) => boolean
   readonly Sealed: Schema.Codec<string, string>
   readonly Entry: Schema.Codec<DomainEntry, typeof DomainEntry.Encoded>
 }
 
-const ALGORITHM = 'aes-256-gcm'
-const KEY_BYTES = 32
 const IV_BYTES = 12
 const TAG_BYTES = 16
 const SEALED_PREFIX = 'enc:v1:'
 
-export class UnsealFailed extends Schema.TaggedError<UnsealFailed>()('UnsealFailed', {
-  cause: Schema.Unknown,
-}) {}
-
-const seal = (key: Buffer, plain: string) => {
-  const iv = randomBytes(IV_BYTES)
-  const cipher = createCipheriv(ALGORITHM, key, iv)
-  const ciphertext = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()])
-
-  return SEALED_PREFIX + Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64')
+export class InvalidEncryptionKey extends Schema.TaggedError<InvalidEncryptionKey>()(
+  'InvalidEncryptionKey',
+  {},
+) {
+  override get message() {
+    return `ENCRYPTION_KEY must be ${Aead.aes256Gcm.keyLength} bytes, base64 encoded`
+  }
 }
 
-const unseal = (key: Buffer, stored: string) =>
-  Result.try({
-    try: () => {
-      const packed = Buffer.from(stored.slice(SEALED_PREFIX.length), 'base64')
-      const decipher = createDecipheriv(ALGORITHM, key, packed.subarray(0, IV_BYTES))
-      decipher.setAuthTag(packed.subarray(IV_BYTES, IV_BYTES + TAG_BYTES))
+export class UnsealFailed extends Schema.TaggedError<UnsealFailed>()('UnsealFailed', {
+  cause: Schema.Unknown,
+}) {
+  override get message() {
+    return 'A sealed value did not open: it was altered, or ENCRYPTION_KEY is not the key that sealed it.'
+  }
+}
 
-      return Buffer.concat([
-        decipher.update(packed.subarray(IV_BYTES + TAG_BYTES)),
-        decipher.final(),
-      ]).toString('utf8')
-    },
-    catch: (cause) => new UnsealFailed({ cause }),
-  })
+const packRow = (iv: Uint8Array, ciphertextThenTag: Uint8Array) => {
+  const tagStart = ciphertextThenTag.length - TAG_BYTES
+  const packed = Buffer.concat([
+    iv,
+    ciphertextThenTag.subarray(tagStart),
+    ciphertextThenTag.subarray(0, tagStart),
+  ])
+
+  return `${SEALED_PREFIX}${packed.toString('base64')}`
+}
+
+const unpackRow = (stored: string) => {
+  const packed = Buffer.from(stored.slice(SEALED_PREFIX.length), 'base64')
+
+  return {
+    iv: packed.subarray(0, IV_BYTES),
+    ciphertextThenTag: Buffer.concat([
+      packed.subarray(IV_BYTES + TAG_BYTES),
+      packed.subarray(IV_BYTES, IV_BYTES + TAG_BYTES),
+    ]),
+  }
+}
 
 const isSealed = (stored: string) => stored.startsWith(SEALED_PREFIX)
 
 export class Cipher extends Context.Service<Cipher, CipherShape>()('app/Cipher', {
   make: Effect.gen(function* () {
-    const key = yield* Config.Redacted('ENCRYPTION_KEY').pipe(
+    const aead = yield* Aead.Aead
+    const random = yield* SecureRandom.SecureRandom
+    const keyBytes = yield* Config.Redacted('ENCRYPTION_KEY').pipe(
       Config.map((value) => Buffer.from(Redacted.value(value), 'base64')),
     )
+    const key = yield* Aead.key(Aead.aes256Gcm, keyBytes).pipe(
+      Effect.mapError(() => new InvalidEncryptionKey()),
+    )
 
-    if (key.length !== KEY_BYTES) {
-      return yield* Effect.die(`ENCRYPTION_KEY must be ${KEY_BYTES} bytes, base64 encoded`)
-    }
+    const seal = Effect.fn('Cipher.seal')(
+      function* (plain: string) {
+        const iv = yield* random.randomBytes(IV_BYTES)
+        const ciphertextThenTag = yield* aead.encrypt(key, new TextEncoder().encode(plain), {
+          nonce: iv,
+        })
+
+        return packRow(iv, ciphertextThenTag)
+      },
+      Effect.tapError((error) => Effect.logError('seal failed', error.message)),
+      Effect.mapError(() => new SealFailed()),
+    )
+
+    const unseal = Effect.fnUntraced(
+      function* (stored: string) {
+        const { iv, ciphertextThenTag } = unpackRow(stored)
+        const plain = yield* aead.decrypt(key, ciphertextThenTag, { nonce: iv })
+
+        return Buffer.from(plain).toString('utf8')
+      },
+      Effect.mapError((cause) => new UnsealFailed({ cause })),
+    )
+
+    const open = (stored: string) => (isSealed(stored) ? unseal(stored) : Effect.succeed(stored))
 
     const SealedString = Schema.String.pipe(
       Schema.decode({
         decode: SchemaGetter.transformEffect((stored: string, options) =>
-          isSealed(stored)
-            ? Effect.fromResult(unseal(key, stored)).pipe(
-                Effect.mapError(
-                  (error) =>
-                    new SchemaIssue.InvalidValue({ message: error.message }, stored, options),
-                ),
-              )
-            : Effect.succeed(stored),
+          open(stored).pipe(
+            Effect.mapError(
+              (error) => new SchemaIssue.InvalidValue({ message: error.message }, stored, options),
+            ),
+          ),
         ),
-        encode: SchemaGetter.transform((plain: string) => seal(key, plain)),
+        encode: SchemaGetter.forbidden(() => 'A codec cannot seal: call Cipher.seal.'),
       }),
     )
 
@@ -85,7 +120,8 @@ export class Cipher extends Context.Service<Cipher, CipherShape>()('app/Cipher',
     )
 
     return {
-      seal: (plain) => seal(key, plain),
+      seal,
+      open,
       isSealed,
       Sealed: SealedString,
       Entry,

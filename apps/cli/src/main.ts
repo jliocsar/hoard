@@ -661,6 +661,8 @@ const program = Command.run(root, { version: VERSION, renderErrors: false }).pip
         error: 'EventNotFound',
         message: `no event "${error.eventId}" today`,
       }),
+    SealFailed: (error) =>
+      exitWith(EXIT.unexpected, { error: 'SealFailed', message: error.message }),
     UnpushedChanges: (error) =>
       exitWith(EXIT.unpushed, {
         error: 'UnpushedChanges',

@@ -7,15 +7,23 @@ import * as Schema from 'effect/Schema'
 import * as SqlClient from 'effect/sql/SqlClient'
 import * as SqlSchema from 'effect/sql/SqlSchema'
 
-import { GOOGLE_ACCOUNT_KEYS, googleAccountFields, googleAccountId } from '../domain.ts'
-import type { CalendarEvent, GoogleAccount, GoogleAccountId } from '../domain.ts'
+import {
+  GOOGLE_ACCOUNT_KEYS,
+  GoogleAccount,
+  googleAccountFields,
+  googleAccountId,
+} from '../domain.ts'
+import type { CalendarEvent, GoogleAccountId, SealFailed } from '../domain.ts'
 import { Cipher } from './Cipher.ts'
 import { Google } from './Google.ts'
-import type { AccessToken, GoogleError } from './Google.ts'
+import type { AccessToken, Grant, GoogleError } from './Google.ts'
 
 export interface CalendarShape {
   readonly accounts: Effect.Effect<readonly GoogleAccount[]>
-  readonly connect: (code: string, redirectUri: string) => Effect.Effect<GoogleAccount, GoogleError>
+  readonly connect: (
+    code: string,
+    redirectUri: string,
+  ) => Effect.Effect<GoogleAccount, GoogleError | SealFailed>
   readonly disconnect: (id: GoogleAccountId) => Effect.Effect<void>
   readonly events: (from: DateTime.Utc, to: DateTime.Utc) => Effect.Effect<readonly CalendarEvent[]>
 }
@@ -65,22 +73,35 @@ export class Calendar extends Context.Service<Calendar, CalendarShape>()('app/Ca
       return fresh.token
     })
 
+    const saveGrant = Effect.fn('Calendar.saveGrant')(
+      function* (grant: Grant, email: string, calendarIds: readonly string[]) {
+        const now = yield* DateTime.now
+        const existing = (yield* accounts).find((account) => account.email === email)
+        const account: GoogleAccount = {
+          id: existing?.id ?? googleAccountId(Bun.randomUUIDv7()),
+          email,
+          calendarIds: calendarIds.length === 0 ? ['primary'] : calendarIds,
+          refreshToken: grant.refreshToken,
+          createdAt: existing?.createdAt ?? now,
+        }
+        const row = yield* Effect.orDie(Schema.encodeEffect(GoogleAccount)(account))
+        const refreshToken = yield* cipher.seal(row.refresh_token)
+
+        yield* sql`
+          INSERT OR REPLACE INTO google_accounts ${sql.insert({ ...row, refresh_token: refreshToken })}
+        `
+
+        return account
+      },
+      sql.withTransaction,
+      Effect.catchTag('SqlError', Effect.die),
+    )
+
     const connect = Effect.fn('Calendar.connect')(function* (code: string, redirectUri: string) {
       const grant = yield* google.exchange(code, redirectUri)
       const email = yield* google.primaryEmail(grant.token)
       const calendarIds = yield* google.selectedCalendars(grant.token)
-      const now = yield* DateTime.now
-      const existing = (yield* accounts).find((account) => account.email === email)
-      const account: GoogleAccount = {
-        id: existing?.id ?? googleAccountId(Bun.randomUUIDv7()),
-        email,
-        calendarIds: calendarIds.length === 0 ? ['primary'] : calendarIds,
-        refreshToken: grant.refreshToken,
-        createdAt: existing?.createdAt ?? now,
-      }
-      const row = yield* Effect.orDie(Schema.encodeEffect(Account)(account))
-
-      yield* sql`INSERT OR REPLACE INTO google_accounts ${sql.insert(row)}`.pipe(Effect.orDie)
+      const account = yield* saveGrant(grant, email, calendarIds)
 
       tokens.set(account.id, grant)
 

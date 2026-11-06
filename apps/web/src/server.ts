@@ -1,6 +1,7 @@
 import { BunHttpServer, BunRuntime } from '@effect/platform-bun'
 import * as Config from 'effect/Config'
 import * as Layer from 'effect/Layer'
+import * as Aead from 'effect/crypto/Aead'
 import * as SecureRandom from 'effect/crypto/SecureRandom'
 import * as FetchHttpClient from 'effect/http/FetchHttpClient'
 import * as HttpRouter from 'effect/http/HttpRouter'
@@ -21,6 +22,10 @@ const EntriesLayer = Entries.layer.pipe(Layer.provideMerge(ObjectStore.layer))
 
 const GoogleLayer = Google.layer.pipe(Layer.provide(FetchHttpClient.layer))
 
+const CipherLayer = Cipher.layer.pipe(
+  Layer.provide(Aead.layerWebCrypto.pipe(Layer.provideMerge(SecureRandom.layerWebCrypto))),
+)
+
 const Services = Layer.mergeAll(
   Auth.layer,
   SecureRandom.layerWebCrypto,
@@ -29,7 +34,7 @@ const Services = Layer.mergeAll(
     ShareLinks.layer,
     Calendar.layer.pipe(Layer.provideMerge(GoogleLayer)),
     BackupLayer.pipe(Layer.provide(ObjectStore.layer)),
-  ).pipe(Layer.provide(Layer.mergeAll(DatabaseLayer, Cipher.layer))),
+  ).pipe(Layer.provide(Layer.mergeAll(DatabaseLayer, CipherLayer))),
   BunHttpServer.layerConfig({ port: Config.Port('PORT').pipe(Config.withDefault(3123)) }),
 )
 
