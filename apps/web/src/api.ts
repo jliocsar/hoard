@@ -17,6 +17,7 @@ import {
   GoogleAccountId,
   MentionTarget,
   NotAnArtifact,
+  SealFailed,
   ShareLinkId,
   ShareTtl,
   Tag,
@@ -29,6 +30,8 @@ import {
 const NotFound = EntryNotFound.pipe(HttpApiSchema.status(404))
 
 const Conflict = VersionConflict.pipe(HttpApiSchema.status(409))
+
+const NotSealed = SealFailed.pipe(HttpApiSchema.status(500))
 
 const RefParams = { ref: EntryRef }
 
@@ -165,7 +168,13 @@ export class AuthApi extends HttpApiGroup.make('auth')
 export class EntriesApi extends HttpApiGroup.make('entries')
   .add(HttpApiEndpoint.get('targets', '/targets', { success: Schema.Array(MentionTarget) }))
   .add(HttpApiEndpoint.get('list', '/', { query: ListQuery, success: ListResponse }))
-  .add(HttpApiEndpoint.post('create', '/', { payload: CreateRequest, success: Entry }))
+  .add(
+    HttpApiEndpoint.post('create', '/', {
+      payload: CreateRequest,
+      success: Entry,
+      error: NotSealed,
+    }),
+  )
   .add(
     HttpApiEndpoint.get('get', '/:ref', {
       params: RefParams,
@@ -178,7 +187,7 @@ export class EntriesApi extends HttpApiGroup.make('entries')
       params: { id: EntryId },
       payload: SaveRequest,
       success: SaveResponse,
-      error: [NotFound, Conflict],
+      error: [NotFound, Conflict, NotSealed],
     }),
   )
   .add(
@@ -219,7 +228,7 @@ export class TagsApi extends HttpApiGroup.make('tags')
 
 export class MeetingsApi extends HttpApiGroup.make('meetings')
   .add(HttpApiEndpoint.get('today', '/', { success: Schema.Array(MeetingSlot) }))
-  .add(HttpApiEndpoint.post('start', '/', { success: Entry }))
+  .add(HttpApiEndpoint.post('start', '/', { success: Entry, error: NotSealed }))
   .prefix('/meetings') {}
 
 export class ArtifactsApi extends HttpApiGroup.make('artifacts')
@@ -233,6 +242,7 @@ export class ArtifactsApi extends HttpApiGroup.make('artifacts')
     HttpApiEndpoint.post('register', '/register', {
       payload: RegisterRequest,
       success: RegisterResponse,
+      error: NotSealed,
     }),
   )
   .add(
