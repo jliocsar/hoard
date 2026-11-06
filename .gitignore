@@ -12,3 +12,6 @@ apps/web/.env
 
 tmp/
 apps/cli/dist
+
+# Agent worktrees: lint and fmt would walk into them
+.claude/worktrees/
