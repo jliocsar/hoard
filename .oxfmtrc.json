@@ -8,5 +8,13 @@
   "trailingComma": "all",
   "arrowParens": "always",
   "sortPackageJson": true,
-  "ignorePatterns": ["**/dist", "**/node_modules", "**/public", "bun.lock"]
+  "ignorePatterns": [
+    "**/dist",
+    "**/node_modules",
+    "**/public",
+    "bun.lock",
+    ".agents",
+    ".claude",
+    "skills-lock.json"
+  ]
 }
