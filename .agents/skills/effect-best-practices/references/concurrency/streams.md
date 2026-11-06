@@ -46,7 +46,7 @@ Stream.flatMap(f, { concurrency: 2, bufferSize? })
 Stream.switchMap(f, { concurrency?, bufferSize? })
 Stream.filter(p)
 Stream.filterMap(f)
-Stream.filterEffect(p, { concurrency })
+Stream.filterEffect(p)
 Stream.filterMapEffect(f)
 Stream.tap(f, { concurrency? })
 Stream.tapBoth(...)
@@ -56,9 +56,9 @@ Stream.takeWhile(p)
 Stream.takeUntil(p)
 Stream.drop(n)
 Stream.dropWhile(p)
-Stream.scan(init, f)
-Stream.scanEffect(init, f)
-Stream.mapAccum(init, f)
+Stream.scan(() => init, f)
+Stream.scanEffect(() => init, f)
+Stream.mapAccum(() => init, f)
 Stream.mapAccumEffect(() => init, (state, a) => Effect<[nextState, values[]]>, { onHalt? })
 Stream.grouped(n)
 Stream.groupedWithin(n, dur)
@@ -91,14 +91,16 @@ Stream.zipRight(that)
 Stream.buffer({ capacity: number | "unbounded", strategy?: "dropping" | "sliding" | "suspend" })
 Stream.broadcast({ capacity, strategy?, replay? })
 Stream.broadcastN({ n, capacity, ... })
-Stream.partition(filter, { bufferSize? })
+Stream.partition(filter, { capacity? })
 ```
+
+`Stream.filterMap`, `filterMapEffect` and `partition` take a `Filter`, which returns a `Result`, not an `Option` or a predicate.
 
 ## Scheduling on streams
 
 ```ts
 Stream.repeat(schedule)
-Stream.repeatElements(schedule, { concurrency })
+Stream.repeatElements(schedule)
 Stream.schedule(schedule)
 Stream.timeout(dur)
 Stream.timeoutOrElse({ duration, orElse })
@@ -123,12 +125,12 @@ Stream.debounce(duration)          // emit only the latest element after a quiet
 Streams carry a typed error channel; recover with `Stream`-level catchers (NOT the `Effect.*` ones). A catch handler returns a REPLACEMENT stream.
 
 ```ts
-Stream.catchTag('HttpError', (e) => Stream.make(fallback)) // one tagged error
+Stream.catchTag("HttpError", (e) => Stream.make(fallback))     // one tagged error
 Stream.catchTags({ HttpError: (e) => Stream.empty, RateLimited: (e) => backoffStream })
-Stream.catch((e) => Stream.fromEffect(recover(e))) // any typed error
-Stream.catchIf(pred, (e) => alt) // predicate-gated
-Stream.catchCause((cause) => alt) // defects + interrupts too
-Stream.mapError((e) => new WrappedError({ cause: e })) // translate the error channel
+Stream.catch((e) => Stream.fromEffect(recover(e)))             // any typed error
+Stream.catchIf(pred, (e) => alt)                               // predicate-gated
+Stream.catchCause((cause) => alt)                              // defects + interrupts too
+Stream.mapError((e) => new WrappedError({ cause: e }))         // translate the error channel
 ```
 
 - `Stream.catchAll` does NOT exist in v4 → use `Stream.catch`.
@@ -138,21 +140,15 @@ Stream.mapError((e) => new WrappedError({ cause: e })) // translate the error ch
 ## Running
 
 ```ts
-Stream.runCollect(s) // Effect<Array<A>>
-Stream.runDrain(s) // run for effects, drop output
+Stream.runCollect(s)   // Effect<Array<A>>
+Stream.runDrain(s)     // run for effects, drop output
 Stream.runForEach(s, f)
 Stream.runForEachWhile(s, f)
 Stream.runForEachArray(s, f)
-Stream.runFold(
-  () => init,
-  (acc, x) => acc,
-)
-Stream.runFoldEffect(
-  () => init,
-  (acc, x) => effect,
-)
-Stream.runHead(s) // Effect<Option<A>>
-Stream.runLast(s) // Effect<Option<A>>
+Stream.runFold(() => init, (acc, x) => acc)
+Stream.runFoldEffect(() => init, (acc, x) => effect)
+Stream.runHead(s)      // Effect<Option<A>>
+Stream.runLast(s)      // Effect<Option<A>>
 Stream.run(s, Sink.sum)
 Stream.toReadableStream(s)
 Stream.toReadableStreamEffect(s)

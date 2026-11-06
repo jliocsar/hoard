@@ -6,14 +6,14 @@ Platform service Tags live in CORE `effect`, NOT `@effect/platform`. Bun adapter
 
 - `FileSystem` → `effect/FileSystem`
 - `Path` → `effect/Path`
-- `Crypto` → `effect/Crypto`
+- Crypto → `effect/crypto/*` (`Digest`, `SecureRandom`, `Aead`, `Cipher`, `Kdf`, `KeyAgreement`, `KeyFormat`, `KeyWrap`, `Mac`, `Signature`, `WebCrypto`, `CryptoError`). `effect/Crypto` is gone since 4.1.0.
 - `Terminal` → `effect/Terminal`
 - `Stdio` → `effect/Stdio`
-- `ChildProcessSpawner` → `effect/unstable/process/ChildProcessSpawner`
-- HTTP → `effect/unstable/http/*` (`HttpServer`, `HttpServerResponse`, `HttpClient`, `FetchHttpClient`, ...)
+- `ChildProcessSpawner` → `effect/process/ChildProcessSpawner`
+- HTTP → `effect/http/*` (`HttpServer`, `HttpServerResponse`, `HttpClient`, `FetchHttpClient`, ...)
 - Bun adapters → `@effect/platform-bun` (`BunRuntime`, `BunServices`, `BunHttpServer`, `BunFileSystem`, ...)
 
-- DON'T import `HttpServerResponse`/`Crypto`/`FileSystem` from `@effect/platform` — wrong package in v4.
+- DON'T import `HttpServerResponse`/`FileSystem` from `@effect/platform` — wrong package in v4.
 - DO yield the service Tag (`FileSystem.FileSystem`, `Path.Path`, ...) — same identity whether provided by Bun or Node layers, so libraries depend on the Tag, not the Bun layer.
 
 ## App entrypoint: `BunRuntime.runMain`
@@ -28,23 +28,24 @@ export const runMain: {
     readonly disableErrorReporting?: boolean | undefined
     readonly teardown?: Teardown | undefined
   }): <E, A>(effect: Effect<A, E>) => void
-  <E, A>(
-    effect: Effect<A, E>,
-    options?: {
-      readonly disableErrorReporting?: boolean | undefined
-      readonly teardown?: Teardown | undefined
-    },
-  ): void
+  <E, A>(effect: Effect<A, E>, options?: {
+    readonly disableErrorReporting?: boolean | undefined
+    readonly teardown?: Teardown | undefined
+  }): void
 } = NodeRuntime.runMain
 ```
 
 Canonical pattern:
 
 ```ts
-import { BunRuntime, BunServices } from '@effect/platform-bun'
-import * as Effect from 'effect/Effect'
+import * as BunRuntime from "@effect/platform-bun/BunRuntime"
+import * as BunServices from "@effect/platform-bun/BunServices"
+import * as Effect from "effect/Effect"
 
-program.pipe(Effect.provide(BunServices.layer), BunRuntime.runMain)
+program.pipe(
+  Effect.provide(BunServices.layer),
+  BunRuntime.runMain
+)
 ```
 
 - DON'T use `BunRuntime.layer` — it does not exist.
@@ -52,23 +53,21 @@ program.pipe(Effect.provide(BunServices.layer), BunRuntime.runMain)
 ## Platform services bundle: `BunServices.layer`
 
 ```ts
-export type BunServices = ChildProcessSpawner | Crypto | FileSystem | Path | Terminal | Stdio
+export type BunServices = ChildProcessSpawner | FileSystem | Path | Terminal | Stdio
 
 export const layer: Layer.Layer<BunServices> = BunChildProcessSpawner.layer.pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(
-      BunFileSystem.layer,
-      BunCrypto.layer,
-      BunPath.layer,
-      BunStdio.layer,
-      BunTerminal.layer,
-    ),
-  ),
+  Layer.provideMerge(Layer.mergeAll(
+    BunFileSystem.layer,
+    BunPath.layer,
+    BunStdio.layer,
+    BunTerminal.layer
+  ))
 )
 ```
 
 - DO provide `BunServices.layer` near the edge for apps/CLIs that touch FS, paths, stdio, terminal, subprocesses.
-- It does NOT include HttpServer, HttpClient, sockets, workers, or Redis — provide those separately.
+- It does NOT include crypto, HttpServer, HttpClient, sockets, workers, or Redis — provide those separately.
+- Crypto is provided by family, only where it's used: `BunCrypto.layer` carries them all, `BunCrypto.layerDigest` / `layerSecureRandom` / `layerMac` / `layerKdf` / `layerAead` / `layerCipher` / `layerSignature` / `layerKeyAgreement` / `layerKeyWrap` one each, and `Digest.layerWebCrypto` / `SecureRandom.layerWebCrypto` run off Web Crypto. `effect/testing/TestCrypto` is gone: use `Layer.mock`.
 - Most Bun core services re-export Node-shared impls:
   - `BunFileSystem.layer = NodeFileSystem.layer`
   - `BunPath.layer = NodePath.layer` (also `layerPosix`, `layerWin32`)
@@ -90,51 +89,51 @@ Layer API:
 
 Options = `ServeOptions<R>` = Bun `Serve` options (port/hostname/unix/routes) plus optional `disablePreemptiveShutdown?` and `gracefulShutdownTimeout?: Duration.Input` (default graceful timeout = 20s).
 
-`HttpServer.serve` (from `effect/unstable/http/HttpServer`) turns a response Effect into a Layer requiring `HttpServer`:
+`HttpServer.serve` (from `effect/http/HttpServer`) turns a response Effect into a Layer requiring `HttpServer`:
 
 ```ts
 export const serve: {
-  <E, R>(
-    effect: Effect.Effect<HttpServerResponse, E, R>,
-  ): Layer.Layer<never, never, HttpServer | Exclude<R, HttpServerRequest | Scope.Scope>>
+  <E, R>(effect: Effect.Effect<HttpServerResponse, E, R>):
+    Layer.Layer<never, never, HttpServer | Exclude<R, HttpServerRequest | Scope.Scope>>
 }
 ```
 
 Canonical Bun HTTP app:
 
 ```ts
-import { BunHttpServer, BunRuntime } from '@effect/platform-bun'
-import * as Effect from 'effect/Effect'
-import * as Layer from 'effect/Layer'
-import * as HttpServer from 'effect/unstable/http/HttpServer'
-import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
+import * as BunHttpServer from "@effect/platform-bun/BunHttpServer"
+import * as BunRuntime from "@effect/platform-bun/BunRuntime"
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
+import * as HttpServer from "effect/http/HttpServer"
+import * as HttpServerResponse from "effect/http/HttpServerResponse"
 
-const app = HttpServerResponse.text('Hello from Bun!')
+const app = Effect.succeed(HttpServerResponse.text("Hello from Bun!"))
 
 HttpServer.serve(app).pipe(
   Layer.provide(BunHttpServer.layer({ port: 3000 })),
   Layer.launch,
-  BunRuntime.runMain,
+  BunRuntime.runMain
 )
 ```
 
 - DO use `BunHttpServer.layer({ port })` for apps; `layerTest`/`layer({ port: 0 })` for tests; `layerConfig` for config-driven ports.
 - `Bun.serve` has ONE active `fetch` handler; each `serve` reloads it and restores the previous handler when the serve scope finalizes.
-- WebSocket upgrade via `HttpServerRequest.upgrade` (calls `server.upgrade`); fails if not upgradeable; non-normal close codes map to `Socket` errors.
+- WebSocket upgrade via the request's `upgrade` property (`request.upgrade: Effect<Socket>`; calls `server.upgrade`); fails if not upgradeable; non-normal close codes map to `Socket` errors.
 - Server stopped with `server.stop()` on scope close; preemptive graceful shutdown unless `disablePreemptiveShutdown: true`.
 - DON'T acquire long-lived servers/subscriptions/worker loops outside a scope — breaks graceful shutdown on SIGINT/SIGTERM.
 
 ## FileSystem / Path / Command usage
 
 ```ts
-import { BunFileSystem } from '@effect/platform-bun'
-import * as FileSystem from 'effect/FileSystem'
-import * as Effect from 'effect/Effect'
+import * as BunFileSystem from "@effect/platform-bun/BunFileSystem"
+import * as FileSystem from "effect/FileSystem"
+import * as Effect from "effect/Effect"
 
-const read = Effect.gen(function* () {
+const read = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
-  return yield* fs.readFileString('config.json')
+  return yield* fs.readFileString("config.json")
 }).pipe(Effect.provide(BunFileSystem.layer))
 ```
 
-- Child processes: use the `ChildProcessSpawner` Tag (from `effect/unstable/process/ChildProcessSpawner`) backed by `BunChildProcessSpawner.layer` (in `BunServices.layer`). v4 has no separate `Command` re-export in platform-bun; spawning goes through `ChildProcessSpawner`.
+- Child processes: use the `ChildProcessSpawner` Tag (from `effect/process/ChildProcessSpawner`) backed by `BunChildProcessSpawner.layer` (in `BunServices.layer`). v4 has no separate `Command` re-export in platform-bun; spawning goes through `ChildProcessSpawner`.

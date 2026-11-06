@@ -2,23 +2,14 @@
 
 ```ts
 import {
-  RegistryProvider,
-  RegistryContext,
-  useAtom,
-  useAtomValue,
-  useAtomSet,
-  useAtomMount,
-  useAtomRefresh,
-  useAtomSuspense,
-  useAtomSubscribe,
-  useAtomInitialValues,
-  useAtomRef,
-  useAtomRefProp,
-  useAtomRefPropValue,
-  HydrationBoundary,
-} from '@effect/atom-react'
-import * as ScopedAtom from '@effect/atom-react/ScopedAtom'
-import { AsyncResult } from 'effect/unstable/reactivity'
+  useAtom, useAtomValue, useAtomSet, useAtomMount, useAtomRefresh,
+  useAtomSuspense, useAtomSubscribe, useAtomInitialValues,
+  useAtomRef, useAtomRefProp, useAtomRefPropValue,
+} from "@effect/atom-react/Hooks"
+import { HydrationBoundary } from "@effect/atom-react/ReactHydration"
+import { RegistryContext, RegistryProvider } from "@effect/atom-react/RegistryContext"
+import * as ScopedAtom from "@effect/atom-react/ScopedAtom"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
 ```
 
 `useAtomValue(effectfulAtom)` returns an `AsyncResult`. `useAtomSuspense` returns `AsyncResult.Success`.
@@ -69,13 +60,13 @@ Fluent builder (type-checked exhaustiveness):
 ```tsx
 const result = useAtomValue(userAtom)
 return AsyncResult.builder(result)
-  .onInitial(() => <Spinner />) // also .onInitialOrWaiting / .onWaiting
+  .onInitial(() => <Spinner />)              // also .onInitialOrWaiting / .onWaiting
   .onSuccess((user) => <Profile user={user} />)
-  .onError((err) => <Err msg={err} />) // typed errors
-  .onErrorTag(['NotFoundError'], (e) => <NotFound resource={e.resource} />) // by _tag
-  .onDefect((d) => <Crash d={d} />) // non-error causes
+  .onError((err) => <Err msg={err} />)       // typed errors
+  .onErrorTag(["NotFoundError"], (e) => <NotFound resource={e.resource} />)  // by _tag
+  .onDefect((d) => <Crash d={d} />)          // non-error causes
   .onInterrupt(() => <Cancelled />)
-  .orElse(() => null) // or .render() / .exhaustive() once all cases covered
+  .orElse(() => null)                        // or .render() / .exhaustive() once all cases covered
 ```
 
 - `.exhaustive()` is only available at the type level once every case is handled; otherwise use `.orElse`/`.orNull`/`.render`.
@@ -88,11 +79,8 @@ return AsyncResult.builder(result)
 
 ```tsx
 <RegistryProvider
-  initialValues={[Atom.initialValue(myAtom, seed)]} // only applied at registry creation
-  scheduleTask={fn}
-  timeoutResolution={n}
-  defaultIdleTTL={400}
->
+  initialValues={[Atom.initialValue(myAtom, seed)]}   // only applied at registry creation
+  scheduleTask={fn} timeoutResolution={n} defaultIdleTTL={400}>
   {children}
 </RegistryProvider>
 ```

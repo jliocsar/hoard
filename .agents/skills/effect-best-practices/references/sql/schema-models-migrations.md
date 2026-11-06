@@ -4,24 +4,24 @@
 
 Each helper takes `{ Request, Result, execute }` and returns `(request: Req["Type"]) => Effect<...>`. `execute` receives `Req["Encoded"]` (the ENCODED request) and returns `ReadonlyArray<unknown>` rows.
 
-| Helper                    | Result on rows         | Empty result               |
-| ------------------------- | ---------------------- | -------------------------- |
-| `findAll`                 | `Array<Res>`           | `[]`                       |
-| `findNonEmpty`            | `NonEmptyArray<Res>`   | fails `NoSuchElementError` |
-| `findOne`                 | `Res` (first row)      | fails `NoSuchElementError` |
-| `findOneOption`           | `Option<Res>`          | `Option.none`              |
-| `void` (`SqlSchema.void`) | `void` (discards rows) | n/a                        |
+| Helper | Result on rows | Empty result |
+|--------|----------------|--------------|
+| `findAll` | `Array<Res>` | `[]` |
+| `findNonEmpty` | `NonEmptyArray<Res>` | fails `NoSuchElementError` |
+| `findOne` | `Res` (first row) | fails `NoSuchElementError` |
+| `findOneOption` | `Option<Res>` | `Option.none` |
+| `void` (`SqlSchema.void`) | `void` (discards rows) | n/a |
 
 ```ts
-import { SqlSchema } from 'effect/unstable/sql'
-import { Schema } from 'effect'
+import * as SqlSchema from "effect/sql/SqlSchema"
+import * as Schema from "effect/Schema"
 
 const getUser = SqlSchema.findOne({
   Request: Schema.Number,
   Result: Schema.Struct({ id: Schema.Number, name: Schema.String }),
-  execute: (id) => sql`SELECT * FROM users WHERE id = ${id}`,
+  execute: (id) => sql`SELECT * FROM users WHERE id = ${id}`
 })
-const user = yield * getUser(1) // Effect<{id,name}, SchemaError | NoSuchElementError | SqlError, ...>
+const user = yield* getUser(1)   // Effect<{id,name}, SchemaError | NoSuchElementError | SqlError, ...>
 ```
 
 - GOTCHA: `execute` gets `Req["Encoded"]` not `Req["Type"]` — schema transforms/JSON/dates/bigints must match the dialect.
@@ -33,17 +33,17 @@ const user = yield * getUser(1) // Effect<{id,name}, SchemaError | NoSuchElement
 Wraps `Effect.request` so concurrent lookups batch into one SQL op. Payload equality/hash drive batching + dedup. Constructors: `ordered`, `findById`, `grouped`, `void`.
 
 ```ts
-import { SqlResolver } from 'effect/unstable/sql'
+import * as SqlResolver from "effect/sql/SqlResolver"
 
 const Select = SqlResolver.findById({
   Id: Schema.Number,
   Result: Schema.Struct({ id: Schema.Number, name: Schema.String }),
   ResultId: (r) => r.id,
-  execute: (ids) => sql`SELECT * FROM test WHERE ${sql.in('id', ids)}`,
+  execute: (ids) => sql`SELECT * FROM test WHERE ${sql.in("id", ids)}`
 })
 
-const exec = SqlResolver.request(Select) // curried form
-const a = yield * Effect.all([exec(1), exec(2)], { concurrency: 'unbounded' })
+const exec = SqlResolver.request(Select)            // curried form
+const a = yield* Effect.all([exec(1), exec(2)], { concurrency: "unbounded" })
 // also: SqlResolver.request(payload, resolver)
 ```
 
@@ -55,37 +55,35 @@ const a = yield * Effect.all([exec(1), exec(2)], { concurrency: 'unbounded' })
 
 ## SqlModel — repository / resolver patterns
 
-Models come from `effect/unstable/schema` `Model.Class`. NOT from `SqlSchema.make`.
+Models come from `effect/schema` `Model.Class`. NOT from `SqlSchema.make`.
 
 ```ts
-import { Model } from 'effect/unstable/schema'
-import { SqlModel, SqlClient, SqlResolver } from 'effect/unstable/sql'
-import { Schema } from 'effect'
+import * as Model from "effect/schema/Model"
+import * as SqlModel from "effect/sql/SqlModel"
+import * as SqlClient from "effect/sql/SqlClient"
+import * as SqlResolver from "effect/sql/SqlResolver"
+import * as Schema from "effect/Schema"
 
-class User extends Model.Class<User>('User')({
-  id: Schema.Int.pipe(Model.FieldExcept(['insert'])), // db-generated, not in insert variant
+class User extends Model.Class<User>("User")({
+  id: Schema.Int.pipe(Model.FieldExcept(["insert"])),   // db-generated, not in insert variant
   name: Schema.String,
-  age: Schema.Int,
+  age: Schema.Int
 }) {}
 // Variant schemas: User (select), User.insert, User.update, User.json, ...
 // Build payloads with: User.insert.make({ name, age })
 
-const repo =
-  yield *
-  SqlModel.makeRepository(User, {
-    tableName: 'users',
-    idColumn: 'id',
-    spanPrefix: 'UserRepository',
-    softDeleteColumn: 'deletedAt', // optional: reads filter `is null`, delete sets CURRENT_TIMESTAMP
-  })
+const repo = yield* SqlModel.makeRepository(User, {
+  tableName: "users",
+  idColumn: "id",
+  spanPrefix: "UserRepository",
+  softDeleteColumn: "deletedAt"   // optional: reads filter `is null`, delete sets CURRENT_TIMESTAMP
+})
 // repo: { insert, insertVoid, update, updateVoid, findById, delete }
-const u = yield * repo.insert(User.insert.make({ name: 'Alice', age: 30 })) // -> User instance
+const u = yield* repo.insert(User.insert.make({ name: "Alice", age: 30 }))   // -> User instance
 
 // Batched resolver variant (returns RequestResolvers, run via SqlResolver.request):
-const resolvers =
-  yield * SqlModel.makeResolvers(User, { tableName: 'users', idColumn: 'id', spanPrefix: 'User' })
-const alice =
-  yield * SqlResolver.request(User.insert.make({ name: 'Alice', age: 30 }), resolvers.insert)
+const resolvers = yield* SqlModel.makeResolvers(User, { tableName: "users", idColumn: "id", spanPrefix: "User" })
+const alice = yield* SqlResolver.request(User.insert.make({ name: "Alice", age: 30 }), resolvers.insert)
 ```
 
 - DO model db-generated columns with `Model.FieldExcept(["insert"])`; soft-delete column with `Model.FieldOnly(["select","update"])`.
@@ -95,25 +93,22 @@ const alice =
 
 ## Migrator
 
-Generic `Migrator.make`; drivers re-export as `PgMigrator.run/layer`, `SqliteMigrator.run/layer`. Loaders: `fromFileSystem(dir)`, `fromGlob(record)`, `fromBabelGlob(record)`, `fromRecord(record)`.
+Generic `Migrator.make`; drivers re-export as `PgMigrator.run/layer`, `SqliteMigrator.run/layer`. Loaders: `Migrator.fromGlob(record)`, `fromBabelGlob(record)`, `fromRecord(record)`. `fromFileSystem(dir)` moved to `effect/sql/MigratorFileSystem` and requires `FileSystem | Path`; driver migrators still re-export it, as used below.
 
 ```ts
-import { SqliteMigrator } from '@effect/sql-sqlite-node'
-import { SqlClient } from 'effect/unstable/sql'
+import * as SqliteMigrator from "@effect/sql-sqlite-node/SqliteMigrator"
+import * as SqlClient from "effect/sql/SqlClient"
 
 // run form (provide SqlClient):
-yield *
-  SqliteMigrator.run({
-    loader: SqliteMigrator.fromFileSystem('./migrations'),
-    // schemaDirectory: "sql/migrations", table: "effect_sql_migrations"
-  }).pipe(Effect.provideService(SqlClient.SqlClient, client))
+yield* SqliteMigrator.run({
+  loader: SqliteMigrator.fromFileSystem("./migrations"),
+  // schemaDirectory: "sql/migrations", table: "effect_sql_migrations"
+}).pipe(Effect.provideService(SqlClient.SqlClient, client))
 
 // or as a layer that blocks dependents until migrations finish:
-const MigratorLive = SqliteMigrator.layer({
-  loader: SqliteMigrator.fromRecord({ '1_init': Effect.void }),
-})
+const MigratorLive = SqliteMigrator.layer({ loader: SqliteMigrator.fromRecord({ "1_init": Effect.void }) })
 ```
 
 - Migration ids are unique NUMBERS; file pattern `<id>_<name>.{js,ts,mjs,mts}`; default-export an `Effect` using the current `SqlClient`. Only ids > latest recorded run execute — editing old migrations won't re-run them.
-- Migrations run inside a transaction. On Postgres the migrations table is explicitly locked; other dialects rely on a table constraint to detect concurrent runners.
+- Migrations run inside a transaction, except on ClickHouse. On Postgres the migrations table is explicitly locked; other dialects rely on a table constraint to detect concurrent runners.
 - `MigrationError` (`Data.TaggedError`) kinds: `BadState | ImportError | Failed | Duplicates | Locked`.

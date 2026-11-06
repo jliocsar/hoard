@@ -7,17 +7,19 @@
 - DO add `.annotate({ description })` to schema fields used as params.
 
 ```ts
-import { Tool, Toolkit } from 'effect/unstable/ai'
-import { Effect, Schema } from 'effect'
+import * as Tool from "effect/ai/Tool"
+import * as Toolkit from "effect/ai/Toolkit"
+import * as Effect from "effect/Effect"
+import * as Schema from "effect/Schema"
 
-const SearchProducts = Tool.make('SearchProducts', {
-  description: 'Search the product catalog by keyword',
+const SearchProducts = Tool.make("SearchProducts", {
+  description: "Search the product catalog by keyword",
   parameters: Schema.Struct({
-    query: Schema.String.annotate({ description: 'The search query' }),
-    maxResults: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(10))),
+    query: Schema.String.annotate({ description: "The search query" }),
+    maxResults: Schema.Number.pipe(Schema.withDecodingDefault(Effect.succeed(10)))
   }),
   success: Schema.Array(Product),
-  failureMode: 'error',
+  failureMode: "error"
 })
 
 const ProductToolkit = Toolkit.make(SearchProducts, GetInventory)
@@ -26,18 +28,16 @@ const ProductToolkit = Toolkit.make(SearchProducts, GetInventory)
 Handlers via `toLayer` — returns a Layer satisfying handler requirements for every tool. Can `yield*` other services (db client, etc.) in the body.
 
 ```ts
-const ProductToolkitLayer = ProductToolkit.toLayer(
-  Effect.gen(function* () {
-    return ProductToolkit.of({
-      SearchProducts: Effect.fn('ProductToolkit.SearchProducts')(function* ({ query, maxResults }) {
-        return [].slice(0, maxResults)
-      }),
-      GetInventory: Effect.fn('ProductToolkit.GetInventory')(function* ({ productId }) {
-        return { productId, available: 42 }
-      }),
+const ProductToolkitLayer = ProductToolkit.toLayer(Effect.gen(function*() {
+  return ProductToolkit.of({
+    SearchProducts: Effect.fn("ProductToolkit.SearchProducts")(function*({ query, maxResults }) {
+      return [].slice(0, maxResults)
+    }),
+    GetInventory: Effect.fn("ProductToolkit.GetInventory")(function*({ productId }) {
+      return { productId, available: 42 }
     })
-  }),
-)
+  })
+}))
 ```
 
 ## Passing the toolkit to generateText
@@ -46,14 +46,12 @@ const ProductToolkitLayer = ProductToolkit.toLayer(
 - DO provide the handler layer: `Layer.provide(ProductToolkitLayer)`.
 
 ```ts
-const response =
-  yield *
-  LanguageModel.generateText({
-    prompt: question,
-    toolkit,
-    toolChoice: 'required',
-  })
-response.toolCalls // [{ name, id, params }]
+const response = yield* LanguageModel.generateText({
+  prompt: question,
+  toolkit,
+  toolChoice: "required"
+})
+response.toolCalls   // [{ name, id, params }]
 response.toolResults // [{ name, id, result, isFailure }]
 ```
 
@@ -67,7 +65,7 @@ response.toolResults // [{ name, id, result, isFailure }]
 - Pre-built: `OpenAiTool.{ApplyPatch, CodeInterpreter, FileSearch, ImageGeneration, LocalShell, Mcp, Shell, WebSearch, WebSearchPreview}`; `AnthropicTool.{Bash_*, CodeExecution_*, ...}`.
 
 ```ts
-const webSearch = OpenAiTool.WebSearch({ search_context_size: 'medium' })
+const webSearch = OpenAiTool.WebSearch({ search_context_size: "medium" })
 const Tools = Toolkit.make(SearchProducts, GetInventory, webSearch)
 ```
 
@@ -79,24 +77,22 @@ Only user-defined tools that need handlers appear in `toLayer`.
 - Result is validated & decoded through the schema; `response.value` is the typed instance.
 
 ```ts
-import { Schema } from 'effect'
+import * as Schema from "effect/Schema"
 
-class LaunchPlan extends Schema.Class<LaunchPlan>('LaunchPlan')({
-  audience: Schema.Literals(['developers', 'operators', 'platform teams']),
+class LaunchPlan extends Schema.Class<LaunchPlan>("LaunchPlan")({
+  audience: Schema.Literals(["developers", "operators", "platform teams"]),
   channels: Schema.Array(Schema.String),
   launchDate: Schema.String,
   summary: Schema.String,
-  keyRisks: Schema.Array(Schema.String),
+  keyRisks: Schema.Array(Schema.String)
 }) {}
 
-const response =
-  yield *
-  model.generateObject({
-    objectName: 'launch_plan',
-    prompt: 'Convert these notes into a launch plan object:\n' + notes,
-    schema: LaunchPlan,
-  })
-response.value // typed, decoded LaunchPlan; extends GenerateTextResponse so .text etc. also present
+const response = yield* model.generateObject({
+  objectName: "launch_plan",
+  prompt: "Convert these notes into a launch plan object:\n" + notes,
+  schema: LaunchPlan
+})
+response.value   // typed, decoded LaunchPlan; extends GenerateTextResponse so .text etc. also present
 ```
 
 - Provider-specific JSON-schema rewriting is handled by a `CodecTransformer` (default `defaultCodecTransformer`); `AnthropicStructuredOutput` / `OpenAiStructuredOutput` helpers also exist.

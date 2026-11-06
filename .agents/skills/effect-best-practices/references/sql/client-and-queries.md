@@ -3,33 +3,32 @@
 ## Imports
 
 ```ts
-import {
-  SqlClient,
-  SqlSchema,
-  SqlResolver,
-  SqlModel,
-  Statement,
-  Migrator,
-  SqlError,
-  SqlStream,
-  SqlConnection,
-} from 'effect/unstable/sql'
-import * as SqlClient from 'effect/unstable/sql/SqlClient'
+import * as SqlClient from "effect/sql/SqlClient"
+import * as SqlSchema from "effect/sql/SqlSchema"
+import * as SqlResolver from "effect/sql/SqlResolver"
+import * as SqlModel from "effect/sql/SqlModel"
+import * as Statement from "effect/sql/Statement"
+import * as Migrator from "effect/sql/Migrator"
+import * as MigratorFileSystem from "effect/sql/MigratorFileSystem"
+import * as SqlError from "effect/sql/SqlError"
+import * as SqlStream from "effect/sql/SqlStream"
+import * as SqlConnection from "effect/sql/SqlConnection"
 
-import { Model } from 'effect/unstable/schema'
+import * as Model from "effect/schema/Model"
 
-import { PgClient, PgMigrator } from '@effect/sql-pg'
-import { SqliteClient, SqliteMigrator } from '@effect/sql-sqlite-bun'
-import { SqliteClient, SqliteMigrator } from '@effect/sql-sqlite-node'
-import { MysqlClient } from '@effect/sql-mysql2'
+import * as PgClient from "@effect/sql-pg/PgClient"
+import * as PgMigrator from "@effect/sql-pg/PgMigrator"
+import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient" // or @effect/sql-sqlite-node/SqliteClient
+import * as SqliteMigrator from "@effect/sql-sqlite-bun/SqliteMigrator" // or @effect/sql-sqlite-node/SqliteMigrator
+import * as MysqlClient from "@effect/sql-mysql2/MysqlClient"
 ```
 
 - DO get the client via the service tag: `const sql = yield* SqlClient.SqlClient`.
-- DON'T write `import * as Sql from "effect/unstable/sql"` then `Sql.SqlClient` — `SqlClient` is itself a namespace; the tag is `SqlClient.SqlClient`.
+- DON'T import the `effect/sql` barrel — house rules ban it. Import each leaf module; `SqlClient` is itself a namespace, so the tag is `SqlClient.SqlClient`.
 
 ## Building a SqlClient layer
 
-Every driver `layer(config)` returns `Layer.Layer<DriverClient | SqlClient.SqlClient, ...>` and internally pipes through `Layer.provide(Reactivity.layer)`. The layer provides BOTH the driver tag (`PgClient`, `SqliteClient`) AND the generic `SqlClient.SqlClient`, plus Reactivity.
+Every driver `layer(config)` returns `Layer.Layer<DriverClient | SqlClient.SqlClient, ...>` and internally pipes through `Layer.provide(Reactivity.layer)`. The layer provides BOTH the driver tag (`PgClient`, `SqliteClient`) AND the generic `SqlClient.SqlClient`. It consumes Reactivity rather than exposing it.
 
 - DO depend on `SqlClient.SqlClient` in generic code; reach for the driver tag only for driver-specific helpers (`pg.json`, `pg.listen`, `sqlite.export`).
 - DO wrap secrets (`password`/`url`) in `Redacted.make` — those fields are `Redacted.Redacted`.
@@ -37,70 +36,67 @@ Every driver `layer(config)` returns `Layer.Layer<DriverClient | SqlClient.SqlCl
 
 ### pg
 
-`PgClient.layer` / `layerConfig` / `make` (scoped pool) / `makeClient` (single client) / `fromPool` / `fromClient`. Pool-backed by default.
+`PgClient.layer` / `layerConfig` / `layerFrom` / `make` (scoped pool) / `makeClient` (single client). Pool-backed by default.
 
 ```ts
-import { PgClient } from '@effect/sql-pg'
-import { Config, Duration, Redacted, String } from 'effect'
+import * as PgClient from "@effect/sql-pg/PgClient"
+import * as Config from "effect/Config"
+import * as Duration from "effect/Duration"
+import * as Redacted from "effect/Redacted"
+import * as Str from "effect/String"
 
 const PgLive = PgClient.layer({
-  host: 'localhost',
-  port: 5432,
-  database: 'mydb',
-  username: 'postgres',
-  password: Redacted.make('password'),
+  host: "localhost", port: 5432, database: "mydb",
+  username: "postgres", password: Redacted.make("password"),
   // url: Redacted.make("postgresql://user:pass@localhost:5432/mydb"),
   ssl: false,
-  maxConnections: 10,
-  minConnections: 2,
+  maxConnections: 10, minConnections: 2,
   connectionTTL: Duration.minutes(5),
   idleTimeout: Duration.seconds(30),
   connectTimeout: Duration.seconds(5),
-  applicationName: 'my-app',
-  transformResultNames: String.snakeToCamel,
-  transformQueryNames: String.camelToSnake,
+  applicationName: "my-app",
+  transformResultNames: Str.snakeToCamel,
+  transformQueryNames: Str.camelToSnake
 })
 
 const PgFromEnv = PgClient.layerConfig({
-  url: Config.redacted('DATABASE_URL'),
+  url: Config.Redacted("DATABASE_URL")
 })
 ```
 
-`PgClientConfig` fields: `url, host, port, path, ssl, database, username, password, connectTimeout, stream, applicationName, spanAttributes, transformResultNames, transformQueryNames, transformJson, types`. Pool adds: `idleTimeout, maxConnections, minConnections, connectionTTL`.
+`PgClientConfig` fields: `url, host, port, path, ssl, database, username, password, connectTimeout, stream, applicationName, spanAttributes, transformResultNames, transformQueryNames, transformJson, types, keepAlive, startupParameters, startupOptions, multiplex, multiplexConcurrency, prepare, preparedStatementCacheSize, maxMessageSize, onAcquire`. Pool adds: `idleTimeout, maxConnections, minConnections, connectionTTL, acquireTimeout`. `password` also takes an `Effect<Redacted>`.
 
 pg-specific client API:
-
 - `pg.json(value): Fragment`
-- `pg.listen(channel): Stream<string, SqlError>`
+- `pg.listen(channel): Effect<Queue.Dequeue<PgConnection.Notification, SqlError>, SqlError, Scope>`
 - `pg.notify(channel, payload): Effect<void, SqlError>`
+- `pg.poolStats`
 
-GOTCHA: `pg.listen` opens a scoped long-lived client and runs `UNLISTEN` on scope close. Keep the stream scoped only as long as you need notifications.
+GOTCHA: `pg.listen` holds a connection until its scope closes, so keep that scope only as long as you need notifications. A failure after registration fails the queue, and closing the scope interrupts its consumers.
 
 ### sqlite-bun (`bun:sqlite`)
 
 ```ts
-import { SqliteClient } from '@effect/sql-sqlite-bun'
+import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient"
 
 const Db = SqliteClient.layer({
-  filename: './mydb.db', // or ":memory:"
+  filename: "./mydb.db",     // or ":memory:"
   readonly: false,
   create: true,
   readwrite: true,
   disableWAL: false,
   transformResultNames: (s) => s,
-  transformQueryNames: (s) => s,
+  transformQueryNames: (s) => s
 })
 ```
 
-Bun `SqliteClientConfig` (ONLY these): `filename, readonly, create, readwrite, disableWAL, spanAttributes, transformResultNames, transformQueryNames`.
+Bun `SqliteClientConfig` (ONLY these): `filename, readonly, create, readwrite, disableWAL, busyTimeout (default 5 seconds), spanAttributes, transformResultNames, transformQueryNames`.
 
 Bun-specific client API:
-
 - `sqlite.export: Effect<Uint8Array, SqlError>`
 - `sqlite.loadExtension(path)`
 
 Bun GOTCHAs:
-
 - One scoped `bun:sqlite` `Database` handle per client; access is serialized via a semaphore. A transaction holds the permit for its whole scope — other fibers on the same client wait.
 - WAL is enabled by default — set `disableWAL: true` for read-only DBs or unwritable dirs.
 - `executeStream` is not implemented (`sql.stream` dies). `updateValues` is not supported (SQLite).
@@ -108,7 +104,7 @@ Bun GOTCHAs:
 
 ### sqlite-node (`better-sqlite3`)
 
-Config (ONLY these): `filename, readonly, prepareCacheSize, prepareCacheTTL, disableWAL, spanAttributes, transformResultNames, transformQueryNames`.
+Config (ONLY these): `filename, readonly, prepareCacheSize, prepareCacheTTL, disableWAL, busyTimeout, spanAttributes, transformResultNames, transformQueryNames`.
 
 - DON'T use `create`, `readwrite`, `fileMustExist`, `timeout`, `verbose` on sqlite-node — they do not exist. (`create`/`readwrite` exist only on the bun config.)
 
@@ -136,16 +132,16 @@ sql`SELECT * FROM users WHERE ${sql.and([sql`age > ${18}`, sql`name = ${name}`])
 sql.or([/* ... */])
 
 // csv (ORDER BY / GROUP BY), optional prefix:
-sql`SELECT * FROM t ${sql.csv("ORDER BY", [sql("a"), sql("b")])}`
+sql`SELECT * FROM t ${sql.csv("ORDER BY", [sql`a`, sql`b`])}`
 
-// INSERT helper (single or array):
+// INSERT helper (one row, or a NON-EMPTY array):
 yield* sql`INSERT INTO users ${sql.insert({ name, email })}`
-yield* sql`INSERT INTO users ${sql.insert(rows)}`                 // batch
+yield* sql`INSERT INTO users ${sql.insert(rows)}`                 // batch: rows is Arr.NonEmptyReadonlyArray; narrow with Arr.isReadonlyArrayNonEmpty
 yield* sql`INSERT INTO users ${sql.insert(row).returning("*")}`   // RETURNING (pg/sqlite)
 
 // UPDATE single row (omit keys you don't want in SET, e.g. id):
 sql`UPDATE users SET ${sql.update(row, ["id"])} WHERE id = ${row.id}`
-// updateValues(rows, alias) — multi-row update; NOT supported in sqlite.
+// updateValues(rows, alias) — multi-row update, rows non-empty; NOT supported in sqlite.
 
 // Raw / unsafe (TRUSTED text only — no escaping of SQL syntax):
 sql.unsafe<Row>("SELECT * FROM users WHERE id = $1", [id])
@@ -167,12 +163,15 @@ Statement extra channels: `.raw` (driver result, e.g. sqlite `{ changes, lastIns
 `sql.withTransaction(effect)` wraps an effect so all queries run with the same client join the txn. Top-level => BEGIN/COMMIT/ROLLBACK; nested => SAVEPOINTs (`effect_sql_<id>`).
 
 ```ts
-const transfer = (from: number, to: number, amount: number) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient
-    yield* sql`UPDATE accounts SET balance = balance - ${amount} WHERE id = ${from}`
-    yield* sql`UPDATE accounts SET balance = balance + ${amount} WHERE id = ${to}`
-  }).pipe(sql.withTransaction)
+const transfer = Effect.fn("Accounts.transfer")(function*(from: number, to: number, amount: number) {
+  const sql = yield* SqlClient.SqlClient
+  yield* sql.withTransaction(
+    Effect.gen(function*() {
+      yield* sql`UPDATE accounts SET balance = balance - ${amount} WHERE id = ${from}`
+      yield* sql`UPDATE accounts SET balance = balance + ${amount} WHERE id = ${to}`
+    })
+  )
+})
 
 // Equivalent call form: sql.withTransaction(sql`INSERT ...`)
 ```
@@ -183,20 +182,20 @@ const transfer = (from: number, to: number, amount: number) =>
 
 ## SqlError handling
 
-`SqlError` is a `Schema.TaggedErrorClass` with `_tag: "SqlError"` and a single `reason` field. `error.message`/`error.cause`/`error.isRetryable` delegate to the reason.
+`SqlError` is a `Schema.TaggedError` with `_tag: "SqlError"` and a single `reason` field. `error.message`/`error.cause`/`error.isRetryable` delegate to the reason.
 
-Reason tags (each a `Schema.TaggedErrorClass`, carrying `cause`, `message`, `operation`): `ConnectionError` (retryable), `AuthenticationError`, `AuthorizationError`, `SqlSyntaxError`, `UniqueViolation` (+ `constraint`), `ConstraintError`, `DeadlockError` (retryable), `SerializationError` (retryable), `LockTimeoutError` (retryable), `StatementTimeoutError` (retryable), `UnknownError`. Also `ResultLengthMismatch` (resolver) with `expected`/`actual`.
+Reason tags (each a `Schema.TaggedError`, carrying `cause`, `message`, `operation`): `ConnectionError` (retryable), `AuthenticationError`, `AuthorizationError`, `SqlSyntaxError`, `UniqueViolation` (+ `constraint`), `ConstraintError`, `DeadlockError` (retryable), `SerializationError` (retryable), `LockTimeoutError` (retryable), `StatementTimeoutError` (retryable), `UnknownError`. Also `ResultLengthMismatch` (resolver) with `expected`/`actual`.
 
 ```ts
+class DuplicateUser extends Schema.TaggedError<DuplicateUser>()("DuplicateUser", { constraint: Schema.String }) {}
+
 program.pipe(
-  Effect.catchTag('SqlError', (e) => {
-    if (e.reason._tag === 'UniqueViolation') return Effect.fail({ _tag: 'Duplicate' as const })
-    return Effect.fail(e)
-  }),
+  Effect.catchReason("SqlError", "UniqueViolation", (reason) =>
+    Effect.fail(new DuplicateUser({ constraint: reason.constraint })))
 )
 
 program.pipe(Effect.retry({ while: (e) => SqlError.isSqlError(e) && e.isRetryable }))
 ```
 
-- DO branch on `error.reason._tag` (structured) — don't string-match `error.message`.
+- DO branch on the reason with `Effect.catchReason` / `catchReasons` / `unwrapReason` + `catchTags` — never read `error.reason._tag`, since a read keeps compiling when a reason is added, and don't string-match `error.message`.
 - pg classifies by SQLSTATE code: `23505`->UniqueViolation, `40P01`->Deadlock, `40001`->Serialization, `57014`->StatementTimeout, `08*`->Connection.

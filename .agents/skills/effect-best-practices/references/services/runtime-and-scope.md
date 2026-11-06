@@ -22,12 +22,13 @@ BackgroundTask.pipe(Layer.launch, NodeRuntime.runMain)
 For embedding Effect in non-Effect frameworks (Express/Hono/Fastify) where a handler runs effects repeatedly.
 
 ```ts
-import { Layer, ManagedRuntime } from 'effect'
+import * as Layer from "effect/Layer"
+import * as ManagedRuntime from "effect/ManagedRuntime"
 export const appMemoMap = Layer.makeMemoMapUnsafe()
 export const runtime = ManagedRuntime.make(AppLayer, { memoMap: appMemoMap })
 // handler: runtime.runPromise(effect) | runSync | runCallback | runFork(effect): Fiber
-process.once('SIGINT', () => void runtime.dispose())
-process.once('SIGTERM', () => void runtime.dispose())
+process.once("SIGINT", () => void runtime.dispose())
+process.once("SIGTERM", () => void runtime.dispose())
 ```
 
 Instance methods: `runFork`, `runSyncExit`, `runSync`, `runCallback`, `runPromise`. Has `.scope: Scope.Closeable`, `.memoMap`, `.contextEffect`.
@@ -43,14 +44,10 @@ Instance methods: `runFork`, `runSyncExit`, `runSync`, `runCallback`, `runPromis
 ### acquireRelease — any resource needing cleanup
 
 ```ts
-const transporter =
-  yield *
-  Effect.acquireRelease(
-    Effect.sync(() =>
-      NodeMailer.createTransport({ /* ... */ auth: { pass: Redacted.value(pass) } }),
-    ),
-    (t) => Effect.sync(() => t.close()),
-  )
+const transporter = yield* Effect.acquireRelease(
+  Effect.sync(() => NodeMailer.createTransport({ /* ... */ auth: { pass: Redacted.value(pass) } })),
+  (t) => Effect.sync(() => t.close())
+)
 ```
 
 Inside a `Layer.effect`/service `make`, acquired resources release when the layer scope closes.
@@ -58,13 +55,10 @@ Inside a `Layer.effect`/service `make`, acquired resources release when the laye
 ### addFinalizer — ad-hoc cleanup in a layer
 
 ```ts
-Layer.effect(
-  Connection,
-  Effect.gen(function* () {
-    yield* Scope.addFinalizer(Effect.log('Closing connection'))
-    return Connection.of({/* ... */})
-  }),
-)
+Layer.effect(Connection, Effect.gen(function*() {
+  yield* Effect.addFinalizer(() => Effect.log("Closing connection"))
+  return Connection.of({ /* ... */ })
+}))
 ```
 
 ### Background tasks tied to scope
@@ -84,9 +78,8 @@ Layer.effect(
 For per-key resources (e.g. per-tenant pools).
 
 ```ts
-export class PoolMap extends LayerMap.Service<PoolMap>()('app/PoolMap', {
-  lookup: (tenantId: string) => DatabasePool.layer(tenantId),
-  idleTimeToLive: '1 minute',
+export class PoolMap extends LayerMap.Service<PoolMap>()("app/PoolMap", {
+  lookup: (tenantId: string) => DatabasePool.layer(tenantId), idleTimeToLive: "1 minute"
 }) {}
 // PoolMap.get("acme") → scoped layer; PoolMap.invalidate("acme"); provide PoolMap.layer
 ```

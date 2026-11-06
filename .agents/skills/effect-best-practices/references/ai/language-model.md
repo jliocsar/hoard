@@ -1,6 +1,6 @@
 # LanguageModel
 
-Core lives in `effect/unstable/ai` (part of the `effect` package, not a separate package). Verified exports of `effect/unstable/ai`: `AiError, AnthropicStructuredOutput, Chat, EmbeddingModel, IdGenerator, LanguageModel, McpSchema, McpServer, Model, OpenAiStructuredOutput, Prompt, Response, ResponseIdTracker, Telemetry, Tokenizer, Tool, Toolkit`.
+Core lives in `effect/ai` (part of the `effect` package, not a separate package). Verified exports of `effect/ai`: `AiError, AnthropicStructuredOutput, Chat, Decision, DecisionModel, EmbeddingModel, IdGenerator, LanguageModel, McpClient, McpClientError, McpProtocol, McpSchema, McpServer, McpTest, Model, OpenAiStructuredOutput, Prompt, Response, ResponseIdTracker, Telemetry, Tokenizer, Tool, Toolkit`.
 
 - DO call the module-level functions `LanguageModel.generateText/generateObject/streamText`; they require `LanguageModel.LanguageModel` in context.
 - Method forms also valid: `const model = yield* LanguageModel.LanguageModel; model.generateText(...)`.
@@ -10,21 +10,22 @@ Core lives in `effect/unstable/ai` (part of the `effect` package, not a separate
 ## generateText
 
 ```ts
-import { Effect } from 'effect'
-import { LanguageModel, Model } from 'effect/unstable/ai'
+import * as Effect from "effect/Effect"
+import * as LanguageModel from "effect/ai/LanguageModel"
+import * as Model from "effect/ai/Model"
 
-const gen = Effect.gen(function* () {
+const gen = Effect.gen(function*() {
   const model = yield* LanguageModel.LanguageModel
   const provider = yield* Model.ProviderName
   const response = yield* model.generateText({
-    prompt: 'Write a short launch announcement...',
+    prompt: "Write a short launch announcement..."
   })
-  response.text // concatenated text parts
+  response.text          // concatenated text parts
   response.reasoningText // string | undefined
-  response.toolCalls // Response.ToolCallParts[]
-  response.toolResults // Response.ToolResultParts[]
-  response.finishReason // "stop" | "length" | ... | "unknown"
-  response.usage // Response.Usage { inputTokens.total, outputTokens.total, ... }
+  response.toolCalls     // Response.ToolCallParts[]
+  response.toolResults   // Response.ToolResultParts[]
+  response.finishReason  // "stop" | "length" | ... | "unknown"
+  response.usage         // Response.Usage { inputTokens.total, outputTokens.total, ... }
   return response.text
 }).pipe(Effect.provide(modelLayer))
 ```
@@ -36,13 +37,14 @@ const gen = Effect.gen(function* () {
 - Part `type` discriminants: `"text"`, `"text-delta"`, `"reasoning"`, `"tool-call"`, `"tool-result"`, `"finish"`. Stream parts use the delta variants.
 
 ```ts
-import { Stream } from 'effect'
-import { LanguageModel, type Response } from 'effect/unstable/ai'
+import * as Stream from "effect/Stream"
+import * as LanguageModel from "effect/ai/LanguageModel"
+import type * as Response from "effect/ai/Response"
 
 LanguageModel.streamText({ prompt: `...` }).pipe(
-  Stream.filter((part): part is Response.TextDeltaPart => part.type === 'text-delta'),
+  Stream.filter((part): part is Response.TextDeltaPart => part.type === "text-delta"),
   Stream.map((part) => part.delta),
-  Stream.provide(modelLayer),
+  Stream.provide(modelLayer)
 )
 ```
 

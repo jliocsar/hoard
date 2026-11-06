@@ -1,9 +1,13 @@
 # Atoms (core)
 
-Core `Atom` module lives in **`effect/unstable/reactivity`** — NOT a separate `@effect/atom` core package.
+Core `Atom` module lives in **`effect/reactivity`** — NOT a separate `@effect/atom` core package.
 
 ```ts
-import { Atom, AtomRegistry, AsyncResult, AtomRef, Hydration } from 'effect/unstable/reactivity'
+import * as Atom from "effect/reactivity/Atom"
+import * as AtomRegistry from "effect/reactivity/AtomRegistry"
+import * as AsyncResult from "effect/reactivity/AsyncResult"
+import * as AtomRef from "effect/reactivity/AtomRef"
+import * as Hydration from "effect/reactivity/Hydration"
 ```
 
 ## CRITICAL: AsyncResult vs effect/Result
@@ -15,13 +19,13 @@ import { Atom, AtomRegistry, AsyncResult, AtomRef, Hydration } from 'effect/unst
 ## Atom.make (polymorphic)
 
 ```ts
-Atom.make(0) // => Writable<number>  (plain value = writable state atom)
-Atom.make((get) => get(a) + get(b)) // => Atom<number>      (sync derived/computed, read-only)
-Atom.make(Effect.succeed(1)) // => Atom<AsyncResult<number, never>>
-Atom.make((get) => Effect.succeed(get(seed) + 1)) // => Atom<AsyncResult<...>>  (derived from Effect)
-Atom.make(someStream) // => Atom<AsyncResult<A, E | NoSuchElementError>>
-Atom.make(eff, { initialValue: 0 }) // seed Success(0) instead of Initial
-Atom.make(eff, { uninterruptible: true }) // effect not interrupted on dispose/refresh
+Atom.make(0)                                  // => Writable<number>  (plain value = writable state atom)
+Atom.make((get) => get(a) + get(b))           // => Atom<number>      (sync derived/computed, read-only)
+Atom.make(Effect.succeed(1))                  // => Atom<AsyncResult<number, never>>
+Atom.make((get) => Effect.succeed(get(seed)+1))    // => Atom<AsyncResult<...>>  (derived from Effect)
+Atom.make(someStream)                         // => Atom<AsyncResult<A, E | NoSuchElementError>>
+Atom.make(eff, { initialValue: 0 })           // seed Success(0) instead of Initial
+Atom.make(eff, { uninterruptible: true })     // effect not interrupted on dispose/refresh
 ```
 
 - **Plain value → `Writable<A>`**; **function/Effect/Stream → read-only `Atom`** (effect/stream wrapped in `AsyncResult`).
@@ -70,7 +74,7 @@ runtime.fn(eff, { reactivityKeys: ["counter"] })   // auto-refresh on Reactivity
 ```
 
 - `runtime.atom` / `runtime.fn` give the inner Effect access to the layer's services `R`.
-- The layer is built once via a shared `MemoMap` (`Atom.defaultMemoMap`).
+- The layer is built once via a shared `MemoMap` (`Atom.runtime.memoMap`, one per registry; `Atom.context({ memoMap })` makes a factory with your own).
 - Replace a runtime's layer in tests:
 
 ```ts

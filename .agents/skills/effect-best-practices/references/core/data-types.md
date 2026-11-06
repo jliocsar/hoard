@@ -25,7 +25,7 @@ There is NO `Either.ts`; the core data type is `Result`.
 `Data.TaggedEnum<{...}>` is the TYPE (each key → a `_tag` variant). `Data.taggedEnum<T>()` returns the runtime helper: one constructor per variant, plus `$is` and `$match`.
 
 ```ts
-import { Data } from 'effect'
+import * as Data from "effect/Data"
 
 type HttpError = Data.TaggedEnum<{
   BadRequest: { readonly message: string }
@@ -34,12 +34,11 @@ type HttpError = Data.TaggedEnum<{
 
 const { BadRequest, NotFound, $is, $match } = Data.taggedEnum<HttpError>()
 
-const err = NotFound({ url: '/x' }) // { _tag: "NotFound", url: "/x" } — plain object
-$is('NotFound')(err) // type-guard: checks ONLY _tag
-$match(err, {
-  // exhaustive; data-first OR data-last (cases only)
+const err = NotFound({ url: "/x" })          // { _tag: "NotFound", url: "/x" } — plain object
+$is("NotFound")(err)                          // type-guard: checks ONLY _tag
+$match(err, {                                 // exhaustive; data-first OR data-last (cases only)
   BadRequest: (e) => e.message,
-  NotFound: (e) => `${e.url} nf`,
+  NotFound: (e) => `${e.url} nf`
 })
 ```
 

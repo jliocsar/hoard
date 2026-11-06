@@ -1,9 +1,8 @@
 # Workflow
 
-`effect/unstable/workflow`. Durable, suspendable, idempotent execution.
+`effect/workflow`. Durable, suspendable, idempotent execution.
 
 `Workflow.make(name, { payload, idempotencyKey, success?, error?, suspendedRetrySchedule?, annotations? })`.
-
 - `idempotencyKey: (payload) => string` (pure, stable) → deterministic `executionId` (hash of name+key).
 - Returns: `.execute(payload, { discard? })`, `.executionId(payload)`, `.poll(id)`, `.interrupt(id)`, `.resume(id)`, `.toLayer(execute)`, `.withCompensation(effect, comp)`.
 - `execute` body attached separately via `.toLayer((payload, executionId) => Effect)` — mirrors `Rpc.make`.
@@ -14,25 +13,27 @@ DON'T use `WorkflowEngine.layerMemory` in production (in-memory, lost on restart
 DON'T call `Activity.make` with a positional `(name, fn)` — that's the mdx bug; pass an options object.
 
 ```ts
-import { Effect, Layer, Schema } from 'effect'
-import { Activity, Workflow, WorkflowEngine } from 'effect/unstable/workflow'
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
+import * as Schema from "effect/Schema"
+import * as Activity from "effect/workflow/Activity"
+import * as Workflow from "effect/workflow/Workflow"
+import * as WorkflowEngine from "effect/workflow/WorkflowEngine"
 
-const ProcessOrder = Workflow.make('ProcessOrder', {
+const ProcessOrder = Workflow.make("ProcessOrder", {
   payload: { orderId: Schema.String, items: Schema.Array(Schema.String) },
   success: Schema.Struct({ orderId: Schema.String, status: Schema.String }),
-  idempotencyKey: ({ orderId }) => orderId,
+  idempotencyKey: ({ orderId }) => orderId
 })
 
-const ProcessOrderLayer = ProcessOrder.toLayer((payload) =>
-  Effect.gen(function* () {
-    yield* reserveInventory
-    yield* Effect.sleep('24 hours') // durable: survives restarts, suspends
-    return { orderId: payload.orderId, status: 'shipped' }
-  }),
-)
+const ProcessOrderLayer = ProcessOrder.toLayer((payload) => Effect.gen(function*() {
+  yield* reserveInventory
+  yield* Effect.sleep("24 hours")  // durable: survives restarts, suspends
+  return { orderId: payload.orderId, status: "shipped" }
+}))
 
-const program = ProcessOrder.execute({ orderId: 'o-1', items: ['a'] }).pipe(
-  Effect.provide(ProcessOrderLayer.pipe(Layer.provideMerge(WorkflowEngine.layerMemory))),
+const program = ProcessOrder.execute({ orderId: "o-1", items: ["a"] }).pipe(
+  Effect.provide(ProcessOrderLayer.pipe(Layer.provideMerge(WorkflowEngine.layerMemory)))
 )
 // fire-and-forget => deterministic id: ProcessOrder.execute(p, { discard: true })
 ```
@@ -43,25 +44,24 @@ const program = ProcessOrder.execute({ orderId: 'o-1', items: ['a'] }).pipe(
 
 ```ts
 const reserveInventory = Activity.make({
-  name: 'reserveInventory',
+  name: "reserveInventory",
   success: Schema.Void,
-  execute: Effect.gen(function* () {
+  execute: Effect.gen(function*() {
     const inventory = yield* InventoryService
-    yield* inventory.reserve('order-1')
-  }),
+    yield* inventory.reserve("order-1")
+  })
 })
 ```
 
 - Named, schema-backed, durable units; results persisted per attempt (keyed by name+attempt).
-- Retry: `Activity.retry(activity, schedulePolicy)` updates `Activity.CurrentAttempt` each attempt; `interruptRetryPolicy` controls retry-on-interrupt (exhaustion => die).
-- `Activity.raceAll(name, ...activities)` races multiple external operations.
+- Retry: `Activity.retry(activity, { times, while?, until? })` (`Effect.retry` options minus `schedule`) updates `Activity.CurrentAttempt` each attempt; `interruptRetryPolicy` controls retry-on-interrupt (exhaustion => die).
+- `Activity.raceAll(name, [activityA, activityB])` races multiple external operations.
 
 ## Compensation (saga) — `withCompensation`
 
 ```ts
-yield *
-  ProcessOrder.withCompensation(
-    reserveInventory,
-    (value, cause) => releaseInventory(value), // runs on workflow failure; ONLY top-level effects
-  )
+yield* ProcessOrder.withCompensation(
+  reserveInventory,
+  (value, cause) => releaseInventory(value)   // runs on workflow failure; ONLY top-level effects
+)
 ```

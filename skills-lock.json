@@ -7,6 +7,12 @@
       "skillPath": "skills/animate/SKILL.md",
       "computedHash": "7598d33e7f60dd5c24531eaaa897621cc3bdb48e8050324211627973bc59c4ce"
     },
+    "effect-best-practices": {
+      "source": "jliocsar/agents-boilerplate",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/effect-best-practices/SKILL.md",
+      "computedHash": "cf0fbb65a59db2d1d8b41aa8568991b8200fc0cd77f61d8dcff94611ab3262ac"
+    },
     "emil-design-eng": {
       "source": "emilkowalski/skills",
       "sourceType": "github",

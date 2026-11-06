@@ -8,12 +8,12 @@
 - DO name service methods with `Effect.fn("Service.method")(...)` inside the layer.
 
 ```ts
-Effect.gen(function* () {
-  yield* Effect.log('Reading file...')
-  return yield* new FileProcessingError({ message: 'Failed to read the file' })
+Effect.gen(function*() {
+  yield* Effect.log("Reading file...")
+  return yield* new FileProcessingError({ message: "Failed to read the file" })
 }).pipe(
   Effect.catch((error) => Effect.logError(`An error occurred: ${error}`)),
-  Effect.withSpan('fileProcessing', { attributes: { method: 'Effect.gen' } }),
+  Effect.withSpan("fileProcessing", { attributes: { method: "Effect.gen" } })
 )
 ```
 
@@ -30,25 +30,21 @@ Effect.gen(function* () {
 - DO annotate the generator return type with `Effect.fn.Return<A, E>` (NOT `Effect.Effect<...>` directly).
 
 ```ts
-export const effectFunction = Effect.fn('effectFunction')(
-  function* (n: number): Effect.fn.Return<string, SomeError> {
-    yield* Effect.logInfo('Received number:', n)
-    return yield* new SomeError({ message: 'Failed to read the file' })
+export const effectFunction = Effect.fn("effectFunction")(
+  function*(n: number): Effect.fn.Return<string, SomeError> {
+    yield* Effect.logInfo("Received number:", n)
+    return yield* new SomeError({ message: "Failed to read the file" })
   },
   Effect.catch((error) => Effect.logError(`An error occurred: ${error}`)),
-  Effect.annotateLogs({ method: 'effectFunction' }),
+  Effect.annotateLogs({ method: "effectFunction" })
 )
 ```
 
 - The body may be a plain `(args) => Effect<...>`, not only a generator:
 
 ```ts
-export const parsePayload = Effect.fn('parsePayload')((input: string) =>
-  Effect.try({
-    try: () => JSON.parse(input),
-    catch: (cause) => new InvalidPayload({ input, cause }),
-  }),
-)
+export const parsePayload = Effect.fn("parsePayload")((input: string) =>
+  Effect.try({ try: () => JSON.parse(input), catch: (cause) => new InvalidPayload({ input, cause }) }))
 ```
 
 - `Effect.fnUntraced(function*(...) {...})` — same shape, NO span/stack frames. Use when tracing is not wanted.
@@ -60,29 +56,29 @@ export const parsePayload = Effect.fn('parsePayload')((input: string) =>
 
 ## Effect constructors
 
-| Source                         | API                                                                                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------- |
-| in-memory value                | `Effect.succeed(value)`                                                                     |
-| sync side-effect (won't throw) | `Effect.sync(() => ...)`                                                                    |
-| sync that may throw            | `Effect.try({ try, catch })`                                                                |
-| Promise that may reject        | `Effect.tryPromise({ try, catch })` (async `try` supported; `try(signal)` gets AbortSignal) |
-| nullable                       | `Effect.fromNullishOr(value)` then `.pipe(Effect.mapError(...))`                            |
-| callback API                   | `Effect.callback<A>((resume) => { ...; return Effect.sync(cleanup) })`                      |
-| short-circuit none/some        | `Effect.succeedNone` / `Effect.succeedSome`                                                 |
+| Source | API |
+|---|---|
+| in-memory value | `Effect.succeed(value)` |
+| sync side-effect (won't throw) | `Effect.sync(() => ...)` |
+| sync that may throw | `Effect.try({ try, catch })` |
+| Promise that may reject | `Effect.tryPromise({ try, catch })` (async `try` supported; `try(signal)` gets AbortSignal) |
+| nullable | `Effect.fromNullishOr(value)` then `.pipe(Effect.mapError(...))` |
+| callback API | `Effect.callback<A>((resume) => { ...; return Effect.sync(cleanup) })` |
+| short-circuit none/some | `Effect.succeedNone` / `Effect.succeedSome` |
 
 - In `Effect.callback`, DO return a finalizer (`Effect.sync(cleanup)`) so interruption cancels the source.
 - `try`/`tryPromise` take `{ try, catch }` where `catch` maps the thrown value to a typed error.
 
 ## Running effects
 
-| API                              | Returns               | When                                                                 |
-| -------------------------------- | --------------------- | -------------------------------------------------------------------- |
-| `Effect.runFork(effect, opts?)`  | `Fiber<A, E>`         | fire-and-forget / supervise a fiber                                  |
-| `Effect.runPromise(effect)`      | `Promise<A>`          | async edge; rejects on failure                                       |
-| `Effect.runPromiseExit(effect)`  | `Promise<Exit<A, E>>` | async edge, want full Exit                                           |
-| `Effect.runSync(effect)`         | `A`                   | SYNCHRONOUS effects only; THROWS on failure, dies if effect is async |
-| `Effect.runSyncExit(effect)`     | `Exit<A, E>`          | sync, want full Exit                                                 |
-| `Effect.runCallback(effect, cb)` | —                     | callback edge                                                        |
+| API | Returns | When |
+|---|---|---|
+| `Effect.runFork(effect, opts?)` | `Fiber<A, E>` | fire-and-forget / supervise a fiber |
+| `Effect.runPromise(effect)` | `Promise<A>` | async edge; rejects on failure |
+| `Effect.runPromiseExit(effect)` | `Promise<Exit<A, E>>` | async edge, want full Exit |
+| `Effect.runSync(effect)` | `A` | SYNCHRONOUS effects only; THROWS on failure, dies if effect is async |
+| `Effect.runSyncExit(effect)` | `Exit<A, E>` | sync, want full Exit |
+| `Effect.runCallback(effect, { onExit })` | interrupt fn | callback edge |
 
 - DO use `NodeRuntime.runMain(program, { disableErrorReporting?: true })` / `BunRuntime.runMain` as the PROCESS ENTRYPOINT — installs SIGINT/SIGTERM handlers and interrupts fibers for graceful shutdown.
 - DO use `Layer.launch(layer)` when the whole app is layers (returns long-running `Effect<never>`), then `runMain`.

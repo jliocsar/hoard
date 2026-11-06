@@ -20,24 +20,24 @@ CRITICAL: in v4 metric updates/reads are STANDALONE functions, NOT methods. Ther
 - `Metric.snapshot` → `Effect<ReadonlyArray<Snapshot>>` of all metrics.
 
 ```ts
-import { Effect, Metric } from 'effect'
+import * as Effect from "effect/Effect"
+import * as Metric from "effect/Metric"
 
-const requestCounter = Metric.counter('http_requests_total', {
-  description: 'Total HTTP requests',
-  incremental: true,
+const requestCounter = Metric.counter("http_requests_total", {
+  description: "Total HTTP requests", incremental: true
 })
-const memoryGauge = Metric.gauge('memory_usage_mb')
-const responseTime = Metric.histogram('response_time_ms', {
-  boundaries: [10, 50, 100, 250, 500, 1000],
+const memoryGauge = Metric.gauge("memory_usage_mb")
+const responseTime = Metric.histogram("response_time_ms", {
+  boundaries: [10, 50, 100, 250, 500, 1000]
 })
-const statusCodes = Metric.frequency('status_codes')
+const statusCodes = Metric.frequency("status_codes")
 
-const program = Effect.gen(function* () {
+const program = Effect.gen(function*() {
   yield* Metric.update(requestCounter, 1)
-  yield* Metric.update(memoryGauge, 512) // gauge: set absolute
-  yield* Metric.modify(memoryGauge, 128) // gauge: relative +128
+  yield* Metric.update(memoryGauge, 512)   // gauge: set absolute
+  yield* Metric.modify(memoryGauge, 128)   // gauge: relative +128
   yield* Metric.update(responseTime, 750)
-  yield* Metric.update(statusCodes, '200') // frequency: string input
+  yield* Metric.update(statusCodes, "200") // frequency: string input
   const snap = yield* Metric.value(requestCounter)
 })
 ```

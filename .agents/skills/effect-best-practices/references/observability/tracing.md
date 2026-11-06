@@ -10,28 +10,24 @@ Spans wrap effects; errors are auto-captured on the enclosing span.
 - `Layer.withSpan("name")` — attach a span around layer construction.
 
 ```ts
-import { Context, Effect, Layer } from 'effect'
+import * as Context from "effect/Context"
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
 
-class Checkout extends Context.Service<
-  Checkout,
-  {
-    processCheckout(orderId: string): Effect.Effect<void>
-  }
->()('acme/Checkout') {
-  static readonly layer = Layer.effect(
-    Checkout,
-    Effect.gen(function* () {
-      return Checkout.of({
-        processCheckout: Effect.fn('Checkout.processCheckout')(function* (orderId: string) {
-          yield* Effect.logInfo('starting checkout', { orderId })
-          yield* Effect.sleep('50 millis').pipe(
-            Effect.withSpan('checkout.charge-card'),
-            Effect.annotateSpans({ 'checkout.order_id': orderId, 'checkout.provider': 'acme-pay' }),
-          )
-        }),
+class Checkout extends Context.Service<Checkout, {
+  processCheckout(orderId: string): Effect.Effect<void>
+}>()("acme/Checkout") {
+  static readonly layer = Layer.effect(Checkout, Effect.gen(function*() {
+    return Checkout.of({
+      processCheckout: Effect.fn("Checkout.processCheckout")(function*(orderId: string) {
+        yield* Effect.logInfo("starting checkout", { orderId })
+        yield* Effect.sleep("50 millis").pipe(
+          Effect.withSpan("checkout.charge-card"),
+          Effect.annotateSpans({ "checkout.order_id": orderId, "checkout.provider": "acme-pay" })
+        )
       })
-    }),
-  )
+    })
+  }))
 }
 ```
 

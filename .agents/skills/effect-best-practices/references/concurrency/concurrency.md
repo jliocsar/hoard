@@ -1,16 +1,16 @@
 # Concurrency Control
 
-`Concurrency = number | "unbounded" | "inherit"`. Default for combinators is sequential (`concurrency` unset ≈ 1).
+`Concurrency = number | "unbounded"`. Default for combinators is sequential (`concurrency` unset ≈ 1).
 
 ## Effect.all / Effect.forEach
 
 ```ts
-Effect.all([eff1, eff2, eff3], { concurrency: 'unbounded' })
+Effect.all([eff1, eff2, eff3], { concurrency: "unbounded" })
 Effect.all({ a: eff1, b: eff2 })
 Effect.all(effs, { discard: true })
-Effect.all(effs, { mode: 'result' })
+Effect.all(effs, { mode: "result" })
 
-Effect.forEach([1, 2, 1, 3, 2], getUserById, { concurrency: 'unbounded' })
+Effect.forEach([1, 2, 1, 3, 2], getUserById, { concurrency: "unbounded" })
 ```
 
 - `Effect.all(arg, { concurrency?, discard?, mode? })`. Record form returns keyed result. `discard: true` → `Effect<void>`. `mode: "result"` collects `Result<A, E>` per item, no short-circuit.
@@ -19,19 +19,15 @@ Effect.forEach([1, 2, 1, 3, 2], getUserById, { concurrency: 'unbounded' })
 - DON'T leave it default (= sequential) and expect parallelism.
 - DON'T look for `*Par` variants — concurrent behavior is options-driven.
 
-## withConcurrency + "inherit"
+## No withConcurrency / "inherit"
 
-```ts
-Effect.withConcurrency(self, n | 'unbounded')
-```
-
-- DO use `Effect.withConcurrency` to set an inherited limit for an effect + descendants that opt into `concurrency: "inherit"`.
+- GONE in v4: `Effect.withConcurrency` and `concurrency: "inherit"` — `Types.Concurrency` is `number | "unbounded"` and no `References` entry sets a default. DO pass `concurrency` explicitly at each call.
 
 ## Semaphore
 
 ```ts
-const sem = yield * Semaphore.make(2)
-yield * sem.withPermits(1)(task)
+const sem = yield* Semaphore.make(2)
+yield* sem.withPermits(1)(task)
 sem.withPermitsIfAvailable(n)(task)
 ```
 

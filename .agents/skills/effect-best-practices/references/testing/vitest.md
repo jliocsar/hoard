@@ -1,6 +1,8 @@
 # vitest
 
-`@effect/vitest` re-exports everything from `vitest` (`expect`, `describe`, `assert`, `vi`, `afterAll`, ...) plus Effect-aware helpers. Top-level exports: `it`, `effect`, `live`, `layer`, `flakyTest`, `prop`, `addEqualityTesters`, `makeMethods`, `describeWrapped`.
+`@effect/vitest` 4.1.2 declares a peer of `vitest` `>=5.0.0 <6.0.0`, so it needs Vitest 5. It re-exports everything from `vitest` (`expect`, `describe`, `assert`, `vi`, `afterAll`, ...) plus Effect-aware helpers. Top-level exports: `it`, `effect`, `live`, `layer`, `flakyTest`, `prop`, `addEqualityTesters`, `makeMethods`, `describeWrapped`.
+
+Fakes work the same as under `bun:test`, and custom ones need the members added at 4.1: see `bun-test.md`.
 
 ## `it` methods
 
@@ -22,37 +24,34 @@ const TestEnv = Layer.mergeAll(TestConsole.layer, TestClock.layer())
 ## Imports
 
 ```ts
-import { assert, describe, it } from '@effect/vitest'
-import { afterAll, assert, describe, expect, it, layer } from '@effect/vitest'
-import * as Effect from 'effect/Effect'
-import * as TestClock from 'effect/testing/TestClock'
-import { FastCheck, TestClock } from 'effect/testing'
+import { assert, describe, it } from "@effect/vitest"
+import { afterAll, assert, describe, expect, it, layer } from "@effect/vitest"
+import * as Effect from "effect/Effect"
+import * as TestClock from "effect/testing/TestClock"
 ```
 
-Both `effect/testing/TestClock` and `{ TestClock } from "effect/testing"` are valid.
+Import the leaf module (`effect/testing/TestClock`), never the `effect/testing` barrel.
 
 ## it.effect + TestClock
 
 ```ts
-import { assert, describe, it } from '@effect/vitest'
-import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
-import * as TestClock from 'effect/testing/TestClock'
+import { assert, describe, it } from "@effect/vitest"
+import * as Effect from "effect/Effect"
+import * as Exit from "effect/Exit"
+import * as TestClock from "effect/testing/TestClock"
 
-describe('TestClock', () => {
-  it.effect('sleep - delays effects until time is adjusted', () =>
-    Effect.gen(function* () {
+describe("TestClock", () => {
+  it.effect("sleep - delays effects until time is adjusted", () =>
+    Effect.gen(function*() {
       let elapsed = false
-      const fiber = yield* Effect.sync(() => {
-        elapsed = true
-      }).pipe(Effect.delay('10 hours'), Effect.forkChild)
-      yield* TestClock.adjust('9 hours')
+      const fiber = yield* Effect.sync(() => { elapsed = true })
+        .pipe(Effect.delay("10 hours"), Effect.forkChild)
+      yield* TestClock.adjust("9 hours")
       assert.isUndefined(fiber.pollUnsafe())
-      yield* TestClock.adjust('11 hours')
+      yield* TestClock.adjust("11 hours")
       assert.deepStrictEqual(fiber.pollUnsafe(), Exit.void)
       assert.isTrue(elapsed)
-    }),
-  )
+    }))
 })
 ```
 
@@ -63,45 +62,47 @@ describe('TestClock', () => {
 ## it.layer + nested it.layer
 
 ```ts
-import { afterAll, expect, it, layer } from '@effect/vitest'
-import { Clock, Context, Duration, Effect, Fiber, Layer } from 'effect'
-import { FastCheck, TestClock } from 'effect/testing'
+import { afterAll, expect, it, layer } from "@effect/vitest"
+import * as Clock from "effect/Clock"
+import * as Context from "effect/Context"
+import * as Duration from "effect/Duration"
+import * as Effect from "effect/Effect"
+import * as Fiber from "effect/Fiber"
+import * as Layer from "effect/Layer"
+import * as TestClock from "effect/testing/TestClock"
 
-class Foo extends Context.Service<Foo, 'foo'>()('Foo') {
-  static Live = Layer.succeed(Foo)('foo')
+class Foo extends Context.Service<Foo, "foo">()("Foo") {
+  static Live = Layer.succeed(Foo)("foo")
 }
-class Bar extends Context.Service<Bar, 'bar'>()('Bar') {
-  static Live = Layer.effect(Bar)(Effect.map(Foo, () => 'bar' as const))
+class Bar extends Context.Service<Bar, "bar">()("Bar") {
+  static Live = Layer.effect(Bar)(Effect.map(Foo, () => "bar" as const))
 }
 
-describe('layer', () => {
+describe("layer", () => {
   layer(Foo.Live)((it) => {
-    it.effect('adds context', () =>
-      Effect.gen(function* () {
-        expect(yield* Foo).toEqual('foo')
-      }),
-    )
+    it.effect("adds context", () =>
+      Effect.gen(function*() {
+        expect(yield* Foo).toEqual("foo")
+      }))
 
-    it.layer(Bar.Live)('nested', (it) => {
-      it.effect('adds context', () =>
-        Effect.gen(function* () {
-          expect(yield* Foo).toEqual('foo')
-          expect(yield* Bar).toEqual('bar')
-        }),
-      )
+    it.layer(Bar.Live)("nested", (it) => {
+      it.effect("adds context", () =>
+        Effect.gen(function*() {
+          expect(yield* Foo).toEqual("foo")
+          expect(yield* Bar).toEqual("bar")
+        }))
     })
   })
 
-  layer(Sleeper.layer)('test services', (it) => {
-    it.effect('TestClock', () =>
-      Effect.gen(function* () {
+  layer(Sleeper.layer)("test services", (it) => {
+    it.effect("TestClock", () =>
+      Effect.gen(function*() {
         const sleeper = yield* Sleeper
         const fiber = yield* Effect.forkChild(sleeper.sleep(100_000))
         yield* Effect.yieldNow
         yield* TestClock.adjust(100_000)
         yield* Fiber.join(fiber)
-      }),
-    )
+      }))
   })
 })
 ```
@@ -119,16 +120,13 @@ describe('layer', () => {
 `Layer.mock(Service, partialImpl)` — loud-failing partial mock. Signatures: `Layer.mock(key, impl): Layer<I>` and curried `Layer.mock(key)(impl): Layer<I>`. `impl` is `PartialEffectful<S>` — supply only the members the test exercises; any omitted member that is an `Effect`/`Stream`/`Channel` (or a function returning one) fails with an `UnimplementedError` defect when called. Non-Effect properties (config values) are required.
 
 ```ts
-class UserService extends Context.Service<
-  UserService,
-  {
-    readonly getUser: (id: string) => Effect.Effect<{ id: string }, Error>
-    readonly deleteUser: (id: string) => Effect.Effect<void, Error>
-  }
->()('UserService') {}
+class UserService extends Context.Service<UserService, {
+  readonly getUser: (id: string) => Effect.Effect<{ id: string }, Error>
+  readonly deleteUser: (id: string) => Effect.Effect<void, Error>
+}>()("UserService") {}
 
 const testLayer = Layer.mock(UserService, {
-  getUser: (id) => Effect.succeed({ id }),
+  getUser: (id) => Effect.succeed({ id })
   // deleteUser omitted → dies with UnimplementedError if called
 })
 ```
@@ -138,10 +136,10 @@ const testLayer = Layer.mock(UserService, {
 Building a `Context` by hand (stubs / manual provision):
 
 ```ts
-let ctx = Context.empty() // Context<never>
-ctx = Context.add(ctx, Port, 8080) // add(ctx, tag, value); replaces same key
-ctx = Context.add(ctx, Host, 'localhost')
-const port = Context.get(ctx, Port) // 8080
+let ctx = Context.empty()                    // Context<never>
+ctx = Context.add(ctx, Port, 8080)           // add(ctx, tag, value); replaces same key
+ctx = Context.add(ctx, Host, "localhost")
+const port = Context.get(ctx, Port)          // 8080
 ```
 
 `Layer.effectContext(effect: Effect<Context<A>>): Layer<A>` — ONE acquisition supplies MULTIPLE tags at once (build a `Context` in the effect, return it). Handy when several test services share one setup. See `../services/layers.md` for canonical coverage.
@@ -155,9 +153,9 @@ const port = Context.get(ctx, Port) // 8080
 - `Ref.getAndSet(ref, value): Effect<A>` — returns the OLD value, sets the new.
 
 ```ts
-const calls = yield * Ref.make<string[]>([])
-yield * Ref.update(calls, (xs) => [...xs, 'getUser'])
-assert.deepStrictEqual(yield * Ref.get(calls), ['getUser'])
+const calls = yield* Ref.make<string[]>([])
+yield* Ref.update(calls, (xs) => [...xs, "getUser"])
+assert.deepStrictEqual(yield* Ref.get(calls), ["getUser"])
 ```
 
 ## expect / assert
@@ -169,17 +167,13 @@ assert.deepStrictEqual(yield * Ref.get(calls), ['getUser'])
 ## flakyTest / retry
 
 ```ts
-it.layer(FetchHttpClient.layer)('FetchHttpClient', (it) => {
-  it.effect('google', () =>
-    flakyTest(
-      Effect.gen(function* () {
-        const response = yield* HttpClient.get('https://www.google.com/').pipe(
-          Effect.flatMap((_) => _.text),
-        )
-        expect(response).toContain('Google')
-      }),
-    ),
-  )
+it.layer(FetchHttpClient.layer)("FetchHttpClient", (it) => {
+  it.effect("google", () =>
+    flakyTest(Effect.gen(function*() {
+      const response = yield* HttpClient.get("https://www.google.com/")
+        .pipe(Effect.flatMap((_) => _.text))
+      expect(response).toContain("Google")
+    })))
 })
 ```
 
@@ -191,16 +185,15 @@ it.layer(FetchHttpClient.layer)('FetchHttpClient', (it) => {
 
 `it.effect.prop(name, arbitraries, ([values], ctx) => Effect, opts?)`:
 
-- `arbitraries` = array or record of `Schema.Schema` or `FastCheck.Arbitrary`. Schemas auto-convert via `Schema.toArbitrary`.
-- `opts.fastCheck` passes FastCheck `Parameters` (e.g. `{ fastCheck: { numRuns: 200 } }`).
+- `arbitraries` = array or record of `Schema.Schema` or `Arbitrary.Arbitrary` (`effect/Arbitrary`; there is no `FastCheck` export). Schemas auto-convert via `Arbitrary.schema`.
+- `opts.arbitrary` passes `Arbitrary.CheckOptions` (`runs`, `size`, `seed`, `maxShrinks`, ... e.g. `{ arbitrary: { runs: 200 } }`).
 
 ```ts
-it.effect.prop('reverse twice is identity', [Schema.String], ([value]) =>
-  Effect.gen(function* () {
-    assert.strictEqual(value.split('').reverse().reverse().join(''), value)
-  }),
-)
+it.effect.prop("reverse twice is identity", [Schema.String], ([value]) =>
+  Effect.gen(function*() {
+    assert.strictEqual(value.split("").reverse().reverse().join(""), value)
+  }))
 ```
 
-- DON'T pass Schemas to the bare top-level `prop` export — it throws on Schemas. Only `it.effect.prop`/`it.live.prop` accept Schemas.
+- The bare top-level `prop` export also accepts Schemas, but its body is a plain (non-Effect) property — use `it.effect.prop`/`it.live.prop` for an Effect body.
 - For `it.live.fails` timeout tests: vitest only LOGS the eventual failure.
