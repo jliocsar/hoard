@@ -348,7 +348,7 @@ and exit 3. Artifacts can't be pulled.
 **Skill.** `@slug` link syntax, the task body format, tag rules, the pull → edit → push
 loop, conflict handling, exit codes, and "no delete, archive instead".
 
-**Tests.** `bun test`: the API through `HttpApiClient` against a temp DB with fake
+**Tests.** `bun run test`: the API through `HttpApiClient` against a temp DB with fake
 ObjectStore and Calendar (bearer auth, create, partial put, conflict, archive,
 register rejecting a bad key), and the CLI's push/merge logic (clean merge, conflict
 markers, unpushed-changes guard).
@@ -357,7 +357,21 @@ markers, unpushed-changes guard).
 
 ## 10. Stack and ops
 
-- TypeScript, Effect v4 (`effect@rc`, `main` branch line), TS 5.9+.
+- TypeScript 7, Effect 4.1.2. Every Effect package shares one version through the catalog
+  in the root `package.json`.
+- Lint: oxlint with `@jliocsar/begone-slop` and tsgo's `recommended`, `effect-native`,
+  `correctness` and `antipattern` presets. `effect-native` holds the rules banning the
+  globals Effect replaces, which `recommended` used to carry. The tsconfig's
+  `allowedUnstableApis` names the unstable Effect modules hoard is built on, so a new one
+  still reports.
+- `typescript`, `oxlint`, `oxlint-tsgolint` and `@effect/tsgo` are pinned exactly and bump
+  together: `bunx effect-tsgo unpatch --oxlint`, edit the versions, then
+  `bun install --minimum-release-age 0`. `bunfig.toml` holds back anything under three days
+  old and skips a young platform binary with no error. A lockfile's entries aren't
+  re-checked, so the deploy's `--frozen-lockfile` install still works.
+- Git hooks live in `.githooks` and `prepare` points `core.hooksPath` at them; the deploy
+  installs with `--ignore-scripts` from a copy with no `.git`, so it never runs that. A Claude
+  Code hook refuses the Bash commands that skip them.
 - SQLite via `@effect/sql-sqlite-bun`, WAL, forward-only migrations run on boot.
 - One exe.dev VM (`jc-hoard`, https://jc-hoard.exe.xyz, public), always-on. Single
   process: `deploy/hoard.service` runs Bun 1.4.4 on port 8000 (the port exe.dev proxies)
@@ -420,6 +434,17 @@ Done: P0 except the broken-`@` page, P1, P2, P3. P3.5 is in progress; P4 is next
 The code carries no comments (lint rule `begone-slop/no-comments`); the non-obvious whys
 live here.
 
+- Never read `_tag`: a read keeps compiling when a variant is added, so the new case goes
+  unhandled. Use `Match.tagsExhaustive`, so a new variant fails to compile. Privacy isn't the
+  argument, since Effect declares `_tag` as a schema field and reads it in its own docs.
+- Encryption at rest stays on `node:crypto`, the one file excused from
+  `node-builtin-import`. `seal` runs synchronously inside SQL templates, while
+  `effect/crypto`'s AES-GCM only runs on `crypto.subtle`, which is async, and writes
+  `ciphertext‖tag` where stored rows hold `iv‖tag‖ciphertext`. Moving means making `seal`
+  effectful and proving existing rows still open.
+- The session signature check uses `Mac.timingSafeEqual`, an XOR-accumulate loop in
+  JavaScript. Its docs note a runtime doesn't guarantee constant time, where `node:crypto`'s
+  compare is native.
 - `apps/web/src/api.ts` is shared with the CLI: it may import `domain.ts` and `effect`,
   never a service, or server code ends up in the binary.
 - `/api/auth/login` is the one `/api` route `SessionGate` lets through.

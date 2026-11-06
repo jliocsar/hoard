@@ -90,9 +90,11 @@ the Google redirect URI use it instead of the `Host` header).
 Checks:
 
 ```sh
-bun run typecheck && bun run lint && bun run fmt:check
-cd apps/web && bun test
+bun run typecheck && bun run lint && bun run test && bun run fmt:check
 ```
+
+`bun install` points git at `.githooks`: a commit formats and lints what's staged and
+typechecks, a push lints the whole repo, checks formatting and runs the tests.
 
 ## CLI
 
