@@ -11,8 +11,9 @@ import * as Struct from 'effect/Struct'
 import * as SqlClient from 'effect/sql/SqlClient'
 import * as SqlSchema from 'effect/sql/SqlSchema'
 
-import type { Entry, EntryRef, MeetingRef, Tag } from '../domain.ts'
+import type { EntryRef, MeetingRef, SealFailed, Tag } from '../domain.ts'
 import {
+  Entry,
   EntryId,
   EntryNotFound,
   EntrySlug,
@@ -53,9 +54,13 @@ export interface EntriesShape {
   readonly search: (query: EntrySearch) => Effect.Effect<SearchPage>
   readonly usedObjectKeys: (keys: readonly string[]) => Effect.Effect<ReadonlySet<string>>
   readonly byEventIds: (eventIds: readonly string[]) => Effect.Effect<ReadonlyMap<string, Entry>>
-  readonly create: (input: EntryCreate) => Effect.Effect<Entry>
-  readonly createArtifacts: (inputs: readonly ArtifactInput[]) => Effect.Effect<ArtifactBatch>
-  readonly put: (input: EntryPut) => Effect.Effect<Entry, EntryNotFound | VersionConflict>
+  readonly create: (input: EntryCreate) => Effect.Effect<Entry, SealFailed>
+  readonly createArtifacts: (
+    inputs: readonly ArtifactInput[],
+  ) => Effect.Effect<ArtifactBatch, SealFailed>
+  readonly put: (
+    input: EntryPut,
+  ) => Effect.Effect<Entry, EntryNotFound | VersionConflict | SealFailed>
   readonly setMeeting: (input: MeetingPut) => Effect.Effect<Entry, EntryNotFound>
   readonly setTags: (id: EntryId, tags: readonly Tag[]) => Effect.Effect<Entry, EntryNotFound>
   readonly archive: (slug: EntrySlug) => Effect.Effect<Entry, EntryNotFound>
@@ -152,9 +157,9 @@ const sealPlaintextBodies = Effect.fn('Entries.sealPlaintextBodies')(function* (
   })(undefined).pipe(Effect.orDie)
 
   for (const row of rows) {
-    yield* sql`UPDATE entries SET body = ${cipher.seal(row.body)} WHERE id = ${row.id}`.pipe(
-      Effect.orDie,
-    )
+    const sealedBody = yield* cipher.seal(row.body)
+
+    yield* sql`UPDATE entries SET body = ${sealedBody} WHERE id = ${row.id}`.pipe(Effect.orDie)
   }
 
   if (rows.length > 0) {
@@ -162,7 +167,7 @@ const sealPlaintextBodies = Effect.fn('Entries.sealPlaintextBodies')(function* (
   }
 })
 
-const queries = (sql: SqlClient.SqlClient, Entry: CipherShape['Entry']) => {
+const queries = (sql: SqlClient.SqlClient, SealedEntry: CipherShape['Entry']) => {
   const columns = sql.literal(ENTRY_COLUMNS)
 
   const selectByType = flow(
@@ -172,7 +177,7 @@ const queries = (sql: SqlClient.SqlClient, Entry: CipherShape['Entry']) => {
         archived: Schema.Boolean,
         everyTagJson: Schema.String,
       }),
-      Result: Entry,
+      Result: SealedEntry,
       execute: ({ type, archived, everyTagJson }) => sql`
         SELECT ${columns} FROM entries
         WHERE type = ${type} AND (archived_at IS NOT NULL) = ${archived ? 1 : 0}
@@ -207,7 +212,7 @@ const queries = (sql: SqlClient.SqlClient, Entry: CipherShape['Entry']) => {
   const selectRecent = flow(
     SqlSchema.findAll({
       Request: Schema.Int,
-      Result: Entry,
+      Result: SealedEntry,
       execute: (limit) => sql`
         SELECT ${columns} FROM entries
         WHERE archived_at IS NULL
@@ -254,7 +259,7 @@ const queries = (sql: SqlClient.SqlClient, Entry: CipherShape['Entry']) => {
   const selectByEventIds = flow(
     SqlSchema.findAll({
       Request: Schema.Array(Schema.String),
-      Result: Entry,
+      Result: SealedEntry,
       execute: (eventIds) => sql`
         SELECT ${columns} FROM entries
         WHERE type = 'meeting' AND archived_at IS NULL
@@ -267,7 +272,7 @@ const queries = (sql: SqlClient.SqlClient, Entry: CipherShape['Entry']) => {
   const selectBySlug = flow(
     SqlSchema.findOneOption({
       Request: EntrySlug,
-      Result: Entry,
+      Result: SealedEntry,
       execute: (slug) => sql`SELECT ${columns} FROM entries WHERE slug = ${slug}`,
     }),
     Effect.orDie,
@@ -276,7 +281,7 @@ const queries = (sql: SqlClient.SqlClient, Entry: CipherShape['Entry']) => {
   const selectById = flow(
     SqlSchema.findOneOption({
       Request: EntryId,
-      Result: Entry,
+      Result: SealedEntry,
       execute: (id) => sql`SELECT ${columns} FROM entries WHERE id = ${id}`,
     }),
     Effect.orDie,
@@ -285,7 +290,7 @@ const queries = (sql: SqlClient.SqlClient, Entry: CipherShape['Entry']) => {
   const selectByRef = flow(
     SqlSchema.findOneOption({
       Request: Schema.String,
-      Result: Entry,
+      Result: SealedEntry,
       execute: (ref) => sql`SELECT ${columns} FROM entries WHERE slug = ${ref} OR id = ${ref}`,
     }),
     Effect.orDie,
@@ -381,11 +386,12 @@ const creators = (
   })
 
   const insert = Effect.fn('Entries.insert')(function* (entry: Entry) {
-    const row = yield* Effect.orDie(Schema.encodeEffect(cipher.Entry)(entry))
+    const row = yield* Effect.orDie(Schema.encodeEffect(Entry)(entry))
+    const body = yield* cipher.seal(row.body)
     const columns = Struct.omit(row, ['tags'])
 
     yield* sql`
-      INSERT INTO entries ${sql.insert({ ...columns, created_at: row.updated_at })}
+      INSERT INTO entries ${sql.insert({ ...columns, body, created_at: row.updated_at })}
     `
 
     return entry
@@ -610,9 +616,11 @@ export class Entries extends Context.Service<Entries, EntriesShape>()('app/Entri
             updatedAt: now,
           }
 
+          const sealedBody = yield* cipher.seal(next.body)
+
           yield* sql`
             UPDATE entries
-            SET title = ${next.title}, body = ${cipher.seal(next.body)}, version = ${next.version},
+            SET title = ${next.title}, body = ${sealedBody}, version = ${next.version},
                 updated_at = ${DateTime.formatIso(now)}
             WHERE id = ${next.id} AND version = ${input.expectedVersion}
           `
@@ -637,7 +645,7 @@ export class Entries extends Context.Service<Entries, EntriesShape>()('app/Entri
           version: current.version + 1,
           updatedAt: now,
         }
-        const row = yield* Effect.orDie(Schema.encodeEffect(cipher.Entry)(next))
+        const row = yield* Effect.orDie(Schema.encodeEffect(Entry)(next))
 
         yield* sql`
           UPDATE entries

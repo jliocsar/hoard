@@ -82,6 +82,7 @@ const callbackRoute = Effect.gen(function* () {
 
   return yield* HttpServerResponse.expireCookie(seeOther('/'), STATE_COOKIE, STATE_COOKIE_OPTIONS)
 }).pipe(
+  Effect.catchTag('SealFailed', (error) => Effect.succeed(respond(<p>{error.message}</p>, 500))),
   Effect.tapError((error) => Effect.logWarning(REJECTED, error.message)),
   Effect.orElseSucceed(() => badRequest),
 )

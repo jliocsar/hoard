@@ -20,8 +20,9 @@ import {
   ShareToken,
   ShareTtl,
   Tag,
+  VersionConflict,
 } from '../domain.ts'
-import type { Entry, Section } from '../domain.ts'
+import type { Entry, SealFailed, Section } from '../domain.ts'
 import { Entries } from '../services/Entries.ts'
 import { ObjectStore } from '../services/ObjectStore.ts'
 import { ShareLinks } from '../services/ShareLinks.ts'
@@ -65,7 +66,11 @@ const notFound = (ref: string) => respond(<p>no entry called {ref}</p>, 404)
 
 const badRequest = respond(<p>bad request</p>, 400)
 
+const notSaved = (error: SealFailed) => Effect.succeed(respond(<p>{error.message}</p>, 500))
+
 const REJECTED = 'rejected entry request'
+
+const isVersionConflict = Schema.is(VersionConflict)
 
 const seeOther = (location: string) => HttpServerResponse.redirect(location, { status: 303 })
 
@@ -167,7 +172,7 @@ const createRoute = (section: Section) =>
           })
 
     return seeOther(`/e/${entry.slug}`)
-  })
+  }).pipe(Effect.catchTag('SealFailed', notSaved))
 
 const claimRoute = Effect.gen(function* () {
   const entries = yield* Entries
@@ -181,6 +186,7 @@ const claimRoute = Effect.gen(function* () {
 
   return seeOther(`/e/${entry.slug}`)
 }).pipe(
+  Effect.catchTag('SealFailed', notSaved),
   Effect.tapError((error) => Effect.logWarning(REJECTED, error.message)),
   Effect.orElseSucceed(() => badRequest),
 )
@@ -204,7 +210,11 @@ const taskDoneRoute = Effect.gen(function* () {
 
   return seeOther('/')
 }).pipe(
-  Effect.catchTag('EntryNotFound', (error) => Effect.succeed(notFound(error.ref))),
+  Effect.retry({ while: isVersionConflict }),
+  Effect.catchTags({
+    EntryNotFound: (error) => Effect.succeed(notFound(error.ref)),
+    SealFailed: notSaved,
+  }),
   Effect.tapError((error) => Effect.logWarning(REJECTED, error.message)),
   Effect.orElseSucceed(() => badRequest),
 )

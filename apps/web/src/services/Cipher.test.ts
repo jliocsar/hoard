@@ -1,17 +1,43 @@
-import { afterAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, describe, expect, test } from 'bun:test'
 import { createDecipheriv } from 'node:crypto'
 import * as ConfigProvider from 'effect/ConfigProvider'
+import * as DateTime from 'effect/DateTime'
+import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
+import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as ManagedRuntime from 'effect/ManagedRuntime'
+import * as Option from 'effect/Option'
+import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
+import * as Aead from 'effect/crypto/Aead'
+import * as CryptoError from 'effect/crypto/CryptoError'
+import * as SecureRandom from 'effect/crypto/SecureRandom'
+import * as SqlClient from 'effect/sql/SqlClient'
+import * as SqlSchema from 'effect/sql/SqlSchema'
 
-import { Cipher } from './Cipher.ts'
+import { entryId, entryRef, googleAccountId, SealFailed, VersionConflict } from '../domain.ts'
+import { Calendar } from './Calendar.ts'
+import { Cipher, InvalidEncryptionKey, UnsealFailed } from './Cipher.ts'
+import { DatabaseLayer } from './Database.ts'
+import { Entries } from './Entries.ts'
+import { Google } from './Google.ts'
+import { ObjectStore } from './ObjectStore.ts'
+
+interface SealingControl {
+  before: Effect.Effect<void, CryptoError.CryptoError>
+  calls: number
+}
+
+type Stored = Entries | Calendar | Cipher | ObjectStore | SqlClient.SqlClient | Google
 
 const KEY = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='
+const OTHER_KEY = 'HxwdHhkaGxgVFhcUERITEA0ODwwJCgsIBQYHBAECAwA='
 const SEALED_PREFIX = 'enc:v1:'
 const IV_BYTES = 12
 const TAG_BYTES = 16
+const SEALS_FOR_DISTINCT_IVS = 1000
 
 const FIXTURES = [
   {
@@ -83,23 +109,171 @@ const unpack = (stored: string) => {
   }
 }
 
-const openWithNodeCrypto = (stored: string, key: string = KEY) => {
+const openWithNodeCrypto = (stored: string) => {
   const { iv, tag, ciphertext } = unpack(stored)
-  const decipher = createDecipheriv('aes-256-gcm', Buffer.from(key, 'base64'), iv)
+  const decipher = createDecipheriv('aes-256-gcm', Buffer.from(KEY, 'base64'), iv)
 
   decipher.setAuthTag(tag)
 
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8')
 }
 
-const TestConfig = ConfigProvider.layer(ConfigProvider.fromUnknown({ ENCRYPTION_KEY: KEY }))
+const flipByteAt = (stored: string, index: number) => {
+  const packed = Buffer.from(stored.slice(SEALED_PREFIX.length), 'base64')
 
-const runtime = ManagedRuntime.make(Cipher.layer.pipe(Layer.provide(TestConfig)))
+  packed.writeUInt8(packed.readUInt8(index) ^ 0xff, index)
+
+  return `${SEALED_PREFIX}${packed.toString('base64')}`
+}
+
+const configFor = (key: string) =>
+  ConfigProvider.layer(ConfigProvider.fromUnknown({ ENCRYPTION_KEY: key }))
+
+const RealCrypto = Aead.layerWebCrypto.pipe(Layer.provideMerge(SecureRandom.layerWebCrypto))
+
+const cipherOver = (key: string, crypto: Layer.Layer<Aead.Aead | SecureRandom.SecureRandom>) =>
+  Cipher.layer.pipe(Layer.provide(Layer.mergeAll(crypto, configFor(key))))
+
+const runOver = <Success, Failure, Services, LayerFailure>(
+  layer: Layer.Layer<Services, LayerFailure>,
+  effect: Effect.Effect<Success, Failure, Services>,
+) => Effect.runPromise(effect.pipe(Effect.provide(layer)))
+
+const runtime = ManagedRuntime.make(cipherOver(KEY, RealCrypto))
 
 const run = <Success, Failure>(effect: Effect.Effect<Success, Failure, Cipher>) =>
   runtime.runPromise(effect)
 
-afterAll(() => runtime.dispose())
+const REFUSAL = new CryptoError.CryptoError({
+  module: 'Aead',
+  method: 'encrypt',
+  reason: new CryptoError.Unsupported({ description: 'refused by the test' }),
+})
+
+const encryptRefused = Effect.fail(REFUSAL)
+
+const sealing: SealingControl = {
+  before: Effect.void,
+  calls: 0,
+}
+
+const ControlledAead = Layer.effect(Aead.Aead)(
+  Effect.gen(function* () {
+    const real = yield* Aead.Aead
+
+    return {
+      ...real,
+      encrypt: (key, plaintext, options) =>
+        Effect.suspend(() => {
+          sealing.calls += 1
+
+          return Effect.andThen(sealing.before, real.encrypt(key, plaintext, options))
+        }),
+    } satisfies typeof Aead.Aead.Service
+  }),
+).pipe(Layer.provide(RealCrypto))
+
+const StoreConfig = ConfigProvider.layer(
+  ConfigProvider.fromUnknown({ ENCRYPTION_KEY: KEY, DATABASE_PATH: ':memory:' }),
+)
+
+const FakeObjectStore = Layer.mock(ObjectStore)({
+  origin: 'https://bucket.test',
+  uploadUrl: (key) => `https://bucket.test/${key}?put`,
+  downloadUrl: (key) => `https://bucket.test/${key}?get`,
+})
+
+const FakeGoogle = Layer.mock(Google)({
+  authUrl: () => 'https://google.test/auth',
+  exchange: () =>
+    Effect.map(DateTime.now, (now) => ({
+      token: 'access',
+      expiresAt: DateTime.addDuration(now, '1 hour'),
+      refreshToken: 'refresh token',
+    })),
+  primaryEmail: () => Effect.succeed('owner@example.test'),
+  selectedCalendars: () => Effect.succeed(['primary']),
+})
+
+const Sealing = Cipher.layer.pipe(
+  Layer.provide(Layer.mergeAll(ControlledAead, SecureRandom.layerWebCrypto)),
+)
+
+const Storage = Layer.mergeAll(DatabaseLayer, Sealing, FakeObjectStore, FakeGoogle)
+
+const StoreServices = Layer.mergeAll(Entries.layer, Calendar.layer).pipe(
+  Layer.provideMerge(Storage),
+)
+
+const store = ManagedRuntime.make(StoreServices.pipe(Layer.provide(StoreConfig)))
+
+const inStore = <Success, Failure>(effect: Effect.Effect<Success, Failure, Stored>) =>
+  store.runPromise(effect)
+
+const newNote = (body: string) =>
+  Effect.gen(function* () {
+    const entries = yield* Entries
+
+    return yield* entries.create({
+      type: 'note',
+      title: Option.some(Bun.randomUUIDv7()),
+      zone: DateTime.zoneMakeOffset(0),
+      body,
+    })
+  })
+
+const storedEntry = (id: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    const rows = yield* SqlSchema.findAll({
+      Request: Schema.String,
+      Result: Schema.Struct({ body: Schema.String, version: Schema.Int }),
+      execute: (entry) => sql`SELECT body, version FROM entries WHERE id = ${entry}`,
+    })(id)
+
+    return rows.at(0)
+  })
+
+const storedToken = (id: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    const rows = yield* SqlSchema.findAll({
+      Request: Schema.String,
+      Result: Schema.Struct({ refresh_token: Schema.String }),
+      execute: (account) => sql`SELECT refresh_token FROM google_accounts WHERE id = ${account}`,
+    })(id)
+
+    return rows.at(0)?.refresh_token
+  })
+
+const insertRawEntry = (body: string) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient
+    const id = entryId(Bun.randomUUIDv7())
+    const now = '2026-01-01T00:00:00.000Z'
+
+    yield* sql`
+      INSERT INTO entries ${sql.insert({
+        id,
+        type: 'note',
+        slug: id,
+        title: id,
+        body,
+        created_at: now,
+        updated_at: now,
+        version: 1,
+      })}
+    `
+
+    return id
+  })
+
+afterEach(() => {
+  sealing.before = Effect.void
+  sealing.calls = 0
+})
+
+afterAll(() => Promise.all([runtime.dispose(), store.dispose()]))
 
 describe('rows sealed by the node:crypto implementation', () => {
   test('hold iv, tag and ciphertext behind the prefix', () => {
@@ -109,6 +283,17 @@ describe('rows sealed by the node:crypto implementation', () => {
       expect(unpack(fixture.sealed).ciphertext.length).toBe(Buffer.byteLength(fixture.opened))
     }
   })
+
+  test('open through Cipher.open', () =>
+    run(
+      Effect.gen(function* () {
+        const cipher = yield* Cipher
+
+        for (const fixture of FIXTURES) {
+          expect(yield* cipher.open(fixture.sealed)).toBe(fixture.opened)
+        }
+      }),
+    ))
 
   test('open through the Sealed codec', () =>
     run(
@@ -120,31 +305,564 @@ describe('rows sealed by the node:crypto implementation', () => {
         }
       }),
     ))
-})
 
-describe('rows Cipher seals', () => {
-  test('open with node:crypto', () =>
-    run(
+  test('read back through Entries, row for row', () =>
+    inStore(
       Effect.gen(function* () {
-        const cipher = yield* Cipher
+        const entries = yield* Entries
 
         for (const fixture of FIXTURES) {
-          expect(openWithNodeCrypto(cipher.seal(fixture.plain))).toBe(fixture.opened)
+          const id = yield* insertRawEntry(fixture.sealed)
+          const read = yield* entries.byRef(entryRef(id))
+          const raw = yield* storedEntry(id)
+
+          expect(read.body).toBe(fixture.opened)
+          expect(raw?.body).toBe(fixture.sealed)
         }
       }),
     ))
 })
 
-describe('legacy plaintext', () => {
-  test('passes through the Sealed codec unchanged', () =>
+describe('rows Cipher seals', () => {
+  test('open with node:crypto, the way an older binary reads them', () =>
     run(
       Effect.gen(function* () {
         const cipher = yield* Cipher
 
-        for (const plain of ['', 'no prefix here', 'enc:v2:other', ' enc:v1:not at the start']) {
+        for (const fixture of FIXTURES) {
+          const sealed = yield* cipher.seal(fixture.plain)
+          const { iv, tag, ciphertext } = unpack(sealed)
+
+          expect(sealed.startsWith(SEALED_PREFIX)).toBe(true)
+          expect(iv.length).toBe(IV_BYTES)
+          expect(tag.length).toBe(TAG_BYTES)
+          expect(ciphertext.length).toBe(Buffer.byteLength(fixture.opened))
+          expect(openWithNodeCrypto(sealed)).toBe(fixture.opened)
+          expect(yield* cipher.open(sealed)).toBe(fixture.opened)
+        }
+      }),
+    ))
+
+  test('match the old implementation byte for byte under the same iv', () =>
+    Promise.all(
+      FIXTURES.map((fixture) => {
+        const iv = new Uint8Array(unpack(fixture.sealed).iv)
+        const FixedRandom = Layer.mock(SecureRandom.SecureRandom)({
+          randomBytes: () => Effect.succeed(iv),
+        })
+        const crypto = Aead.layerWebCrypto.pipe(Layer.provideMerge(FixedRandom))
+
+        return runOver(
+          cipherOver(KEY, crypto),
+          Effect.gen(function* () {
+            const cipher = yield* Cipher
+
+            expect(yield* cipher.seal(fixture.plain)).toBe(fixture.sealed)
+          }),
+        )
+      }),
+    ))
+
+  test('never repeat an iv', () =>
+    run(
+      Effect.gen(function* () {
+        const cipher = yield* Cipher
+        const seals = yield* Effect.forEach(Array.from({ length: SEALS_FOR_DISTINCT_IVS }), () =>
+          cipher.seal('the same value'),
+        )
+
+        expect(new Set(seals.map((sealed) => unpack(sealed).iv.toString('hex'))).size).toBe(
+          SEALS_FOR_DISTINCT_IVS,
+        )
+        expect(new Set(seals).size).toBe(SEALS_FOR_DISTINCT_IVS)
+      }),
+    ))
+})
+
+describe('a value that does not open', () => {
+  test('tampered iv, tag or ciphertext fails with UnsealFailed', () =>
+    run(
+      Effect.gen(function* () {
+        const cipher = yield* Cipher
+        const stored = FIXTURES.find((fixture) => fixture.label === 'ascii')?.sealed ?? ''
+
+        for (const index of [0, IV_BYTES, IV_BYTES + TAG_BYTES]) {
+          const error = yield* Effect.flip(cipher.open(flipByteAt(stored, index)))
+
+          expect(error).toBeInstanceOf(UnsealFailed)
+          expect(error.message).toContain('ENCRYPTION_KEY')
+        }
+      }),
+    ))
+
+  test('a wrong key fails with UnsealFailed for every fixture', () =>
+    runOver(
+      cipherOver(OTHER_KEY, RealCrypto),
+      Effect.gen(function* () {
+        const cipher = yield* Cipher
+
+        for (const fixture of FIXTURES) {
+          expect(yield* Effect.flip(cipher.open(fixture.sealed))).toBeInstanceOf(UnsealFailed)
+        }
+      }),
+    ))
+
+  test('a truncated or malformed value fails with UnsealFailed', () =>
+    run(
+      Effect.gen(function* () {
+        const cipher = yield* Cipher
+        const stored = FIXTURES.find((fixture) => fixture.label === 'empty')?.sealed ?? ''
+
+        for (const broken of [
+          SEALED_PREFIX,
+          `${SEALED_PREFIX}not base64 at all!`,
+          `${SEALED_PREFIX}AAAA`,
+          stored.slice(0, stored.length - 8),
+        ]) {
+          expect(yield* Effect.flip(cipher.open(broken))).toBeInstanceOf(UnsealFailed)
+        }
+      }),
+    ))
+
+  test('fails the Sealed codec with a schema error naming the cause', () =>
+    run(
+      Effect.gen(function* () {
+        const cipher = yield* Cipher
+        const stored = FIXTURES.find((fixture) => fixture.label === 'ascii')?.sealed ?? ''
+        const error = yield* Effect.flip(
+          Schema.decodeEffect(cipher.Sealed)(flipByteAt(stored, IV_BYTES)),
+        )
+
+        expect(error).toBeInstanceOf(Schema.SchemaError)
+        expect(error.message).toContain('ENCRYPTION_KEY')
+      }),
+    ))
+})
+
+describe('legacy plaintext', () => {
+  const LEGACY_VALUES = ['', 'no prefix here', 'enc:v2:other', ' enc:v1:not at the start']
+
+  test('passes through open and the Sealed codec unchanged', () =>
+    run(
+      Effect.gen(function* () {
+        const cipher = yield* Cipher
+
+        for (const plain of LEGACY_VALUES) {
           expect(cipher.isSealed(plain)).toBe(false)
+          expect(yield* cipher.open(plain)).toBe(plain)
           expect(yield* Schema.decodeEffect(cipher.Sealed)(plain)).toBe(plain)
         }
+      }),
+    ))
+
+  test('never reaches the cipher', () =>
+    runOver(
+      cipherOver(KEY, Layer.mergeAll(Layer.mock(Aead.Aead)({}), SecureRandom.layerWebCrypto)),
+      Effect.gen(function* () {
+        const cipher = yield* Cipher
+
+        for (const plain of LEGACY_VALUES) {
+          expect(yield* cipher.open(plain)).toBe(plain)
+        }
+      }),
+    ))
+
+  test('a body is sealed on boot, and a sealed one is left byte for byte', () =>
+    inStore(
+      Effect.gen(function* () {
+        const plainId = yield* insertRawEntry('a body from before encryption')
+        const emptyId = yield* insertRawEntry('')
+        const sealedFixture = FIXTURES.find((fixture) => fixture.label === 'accented')?.sealed ?? ''
+        const sealedId = yield* insertRawEntry(sealedFixture)
+
+        yield* Entries.make
+
+        const plainRow = yield* storedEntry(plainId)
+        const emptyRow = yield* storedEntry(emptyId)
+        const sealedRow = yield* storedEntry(sealedId)
+
+        expect(openWithNodeCrypto(plainRow?.body ?? '')).toBe('a body from before encryption')
+        expect(openWithNodeCrypto(emptyRow?.body ?? '')).toBe('')
+        expect(sealedRow?.body).toBe(sealedFixture)
+      }),
+    ))
+
+  test('a refresh token stays as stored, and still reads', () =>
+    inStore(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient
+        const calendar = yield* Calendar
+        const id = googleAccountId(Bun.randomUUIDv7())
+
+        yield* sql`
+          INSERT INTO google_accounts ${sql.insert({
+            id,
+            email: 'legacy@example.test',
+            calendar_ids: '["primary"]',
+            refresh_token: 'legacy plaintext token',
+            created_at: '2026-01-01T00:00:00.000Z',
+          })}
+        `
+
+        yield* Entries.make
+
+        const accounts = yield* calendar.accounts
+
+        expect(accounts.find((account) => account.id === id)?.refreshToken).toBe(
+          'legacy plaintext token',
+        )
+        expect(yield* storedToken(id)).toBe('legacy plaintext token')
+
+        yield* calendar.disconnect(id)
+      }),
+    ))
+})
+
+describe('the encryption key', () => {
+  test('of the wrong length fails the layer with InvalidEncryptionKey', () =>
+    runOver(
+      Layer.mergeAll(RealCrypto, configFor('dG9vIHNob3J0')),
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(Cipher.make)
+
+        expect(error).toBeInstanceOf(InvalidEncryptionKey)
+        expect(error.message).toContain('ENCRYPTION_KEY')
+      }),
+    ))
+})
+
+describe('the codecs', () => {
+  test('refuse to seal, so a failed seal cannot lose its type', () =>
+    run(
+      Effect.gen(function* () {
+        const cipher = yield* Cipher
+        const error = yield* Effect.flip(Schema.encodeEffect(cipher.Sealed)('value'))
+
+        expect(error).toBeInstanceOf(Schema.SchemaError)
+        expect(error.message).toContain('Cipher.seal')
+      }),
+    ))
+})
+
+describe('a seal that fails', () => {
+  test('is a SealFailed naming no detail', () =>
+    runOver(
+      cipherOver(
+        KEY,
+        Layer.mergeAll(
+          Layer.mock(Aead.Aead)({ encrypt: () => encryptRefused }),
+          SecureRandom.layerWebCrypto,
+        ),
+      ),
+      Effect.gen(function* () {
+        const cipher = yield* Cipher
+        const error = yield* Effect.flip(cipher.seal('a secret value'))
+
+        expect(error).toBeInstanceOf(SealFailed)
+        expect(error.message).toContain('nothing was saved')
+        expect(error.message).not.toContain('a secret value')
+      }),
+    ))
+
+  test('rolls a put back when the cipher dies instead of failing', () =>
+    inStore(
+      Effect.gen(function* () {
+        const entries = yield* Entries
+        const note = yield* newNote('kept')
+        const before = yield* storedEntry(note.id)
+
+        sealing.before = Effect.die('a native failure effect/crypto does not classify')
+
+        const exit = yield* Effect.exit(
+          entries.put({ id: note.id, body: 'lost', expectedVersion: note.version }),
+        )
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(yield* storedEntry(note.id)).toEqual(before)
+      }),
+    ))
+
+  test('rolls a put back', () =>
+    inStore(
+      Effect.gen(function* () {
+        const entries = yield* Entries
+        const note = yield* newNote('kept')
+        const before = yield* storedEntry(note.id)
+
+        sealing.before = encryptRefused
+
+        const error = yield* Effect.flip(
+          entries.put({ id: note.id, body: 'lost', title: 'lost', expectedVersion: note.version }),
+        )
+
+        expect(error).toBeInstanceOf(SealFailed)
+        expect(yield* storedEntry(note.id)).toEqual(before)
+      }),
+    ))
+
+  test('leaves no entry behind on create', () =>
+    inStore(
+      Effect.gen(function* () {
+        const entries = yield* Entries
+        const title = Bun.randomUUIDv7()
+
+        sealing.before = encryptRefused
+
+        const error = yield* Effect.flip(
+          entries.create({
+            type: 'note',
+            title: Option.some(title),
+            zone: DateTime.zoneMakeOffset(0),
+          }),
+        )
+
+        expect(error).toBeInstanceOf(SealFailed)
+        expect(yield* entries.takenTitles('note', [title])).toEqual(new Set())
+      }),
+    ))
+
+  test('rolls back every artifact in the batch', () =>
+    inStore(
+      Effect.gen(function* () {
+        const entries = yield* Entries
+        const titles = [Bun.randomUUIDv7(), Bun.randomUUIDv7()]
+
+        sealing.before = Effect.suspend(() => (sealing.calls === 1 ? Effect.void : encryptRefused))
+
+        const error = yield* Effect.flip(
+          entries.createArtifacts(
+            titles.map((title) => ({
+              title,
+              objectKey: `artifacts/${title}`,
+              mime: 'text/plain',
+              bytes: 1,
+            })),
+          ),
+        )
+
+        expect(error).toBeInstanceOf(SealFailed)
+        expect(sealing.calls).toBe(2)
+        expect(yield* entries.takenTitles('artifact', titles)).toEqual(new Set())
+      }),
+    ))
+
+  test('keeps a Google refresh token out of the table', () =>
+    inStore(
+      Effect.gen(function* () {
+        const calendar = yield* Calendar
+        const before = yield* calendar.accounts
+
+        sealing.before = encryptRefused
+
+        expect(yield* Effect.flip(calendar.connect('code', 'https://app.test/cb'))).toBeInstanceOf(
+          SealFailed,
+        )
+        expect(yield* calendar.accounts).toEqual(before)
+      }),
+    ))
+})
+
+describe('what the store writes', () => {
+  test('create, put and an empty artifact all open with node:crypto', () =>
+    inStore(
+      Effect.gen(function* () {
+        const entries = yield* Entries
+        const note = yield* newNote('first é')
+        const created = yield* storedEntry(note.id)
+
+        expect(openWithNodeCrypto(created?.body ?? '')).toBe('first é')
+
+        const next = yield* entries.put({
+          id: note.id,
+          body: 'second 🧠',
+          expectedVersion: note.version,
+        })
+        const saved = yield* storedEntry(note.id)
+
+        expect(next.body).toBe('second 🧠')
+        expect(saved?.version).toBe(note.version + 1)
+        expect(openWithNodeCrypto(saved?.body ?? '')).toBe('second 🧠')
+
+        const { created: artifacts } = yield* entries.createArtifacts([
+          {
+            title: Bun.randomUUIDv7(),
+            objectKey: `artifacts/${Bun.randomUUIDv7()}`,
+            mime: 'text/plain',
+            bytes: 1,
+          },
+        ])
+        const artifact = yield* storedEntry(artifacts.at(0)?.id ?? '')
+
+        expect(openWithNodeCrypto(artifact?.body ?? 'missing')).toBe('')
+      }),
+    ))
+
+  test('a title-only put seals the same body under a fresh iv', () =>
+    inStore(
+      Effect.gen(function* () {
+        const entries = yield* Entries
+        const note = yield* newNote('same body')
+        const before = yield* storedEntry(note.id)
+
+        yield* entries.put({ id: note.id, title: 'renamed', expectedVersion: note.version })
+
+        const after = yield* storedEntry(note.id)
+
+        expect(after?.body).not.toBe(before?.body)
+        expect(openWithNodeCrypto(after?.body ?? '')).toBe('same body')
+      }),
+    ))
+
+  test('setMeeting neither seals nor touches the stored body', () =>
+    inStore(
+      Effect.gen(function* () {
+        const entries = yield* Entries
+        const note = yield* newNote('meeting body')
+        const before = yield* storedEntry(note.id)
+        const now = yield* DateTime.now
+
+        sealing.before = encryptRefused
+        sealing.calls = 0
+
+        yield* entries.setMeeting({
+          id: note.id,
+          title: 'standup',
+          meeting: { accountId: null, start: now, attendees: [] },
+        })
+
+        const after = yield* storedEntry(note.id)
+
+        expect(sealing.calls).toBe(0)
+        expect(after?.body).toBe(before?.body)
+        expect(after?.version).toBe(note.version + 1)
+      }),
+    ))
+
+  test('two connects for one email at once make one row', () =>
+    inStore(
+      Effect.gen(function* () {
+        const calendar = yield* Calendar
+        const accounts = yield* Effect.forEach(
+          [0, 1],
+          () => calendar.connect('code', 'https://app.test/cb'),
+          { concurrency: 'unbounded' },
+        )
+
+        expect((yield* calendar.accounts).length).toBe(1)
+        expect(accounts.at(0)?.id).toBe(accounts.at(1)?.id ?? googleAccountId(''))
+
+        yield* calendar.disconnect(accounts.at(0)?.id ?? googleAccountId(''))
+      }),
+    ))
+
+  test('a connected account stores its token sealed', () =>
+    inStore(
+      Effect.gen(function* () {
+        const calendar = yield* Calendar
+        const account = yield* calendar.connect('code', 'https://app.test/cb')
+
+        expect(openWithNodeCrypto((yield* storedToken(account.id)) ?? '')).toBe('refresh token')
+        expect((yield* calendar.accounts).at(-1)?.refreshToken).toBe('refresh token')
+
+        yield* calendar.disconnect(account.id)
+      }),
+    ))
+})
+
+describe('a transaction waiting on the cipher', () => {
+  test('keeps another request out of it', () =>
+    inStore(
+      Effect.gen(function* () {
+        const entries = yield* Entries
+        const note = yield* newNote('kept')
+        const entered = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void, CryptoError.CryptoError>()
+        const finished = { other: false }
+
+        sealing.calls = 0
+        sealing.before = Effect.suspend(() =>
+          sealing.calls === 1
+            ? Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(release))
+            : Effect.void,
+        )
+
+        const held = yield* Effect.forkChild(
+          Effect.flip(entries.put({ id: note.id, body: 'lost', expectedVersion: note.version })),
+        )
+
+        yield* Deferred.await(entered)
+
+        const other = yield* Effect.forkChild(
+          newNote('survives').pipe(
+            Effect.tap(() => Effect.sync(() => void (finished.other = true))),
+          ),
+        )
+
+        yield* Effect.sleep('20 millis')
+
+        expect(finished.other).toBe(false)
+
+        yield* Deferred.fail(release, REFUSAL)
+
+        expect(yield* Fiber.join(held)).toBeInstanceOf(SealFailed)
+
+        const survivor = yield* Fiber.join(other)
+
+        expect(finished.other).toBe(true)
+        expect((yield* storedEntry(note.id))?.version).toBe(note.version)
+        expect(openWithNodeCrypto((yield* storedEntry(survivor.id))?.body ?? '')).toBe('survives')
+      }),
+    ))
+
+  test('rolls back when interrupted, and frees the connection', () =>
+    inStore(
+      Effect.gen(function* () {
+        const entries = yield* Entries
+        const note = yield* newNote('kept')
+        const entered = yield* Deferred.make<void>()
+
+        sealing.before = Effect.andThen(Deferred.succeed(entered, undefined), Effect.never)
+
+        const held = yield* Effect.forkChild(
+          entries.put({ id: note.id, body: 'lost', expectedVersion: note.version }),
+        )
+
+        yield* Deferred.await(entered)
+        yield* Fiber.interrupt(held)
+
+        sealing.before = Effect.void
+
+        expect((yield* storedEntry(note.id))?.version).toBe(note.version)
+
+        const next = yield* entries.put({
+          id: note.id,
+          body: 'saved',
+          expectedVersion: note.version,
+        })
+
+        expect(next.version).toBe(note.version + 1)
+      }),
+    ))
+
+  test('two puts at one version: one wins, one conflicts', () =>
+    inStore(
+      Effect.gen(function* () {
+        const entries = yield* Entries
+        const note = yield* newNote('start')
+        const results = yield* Effect.forEach(
+          ['left', 'right'],
+          (body) =>
+            Effect.result(entries.put({ id: note.id, body, expectedVersion: note.version })),
+          { concurrency: 'unbounded' },
+        )
+        const won = results.filter(Result.isSuccess)
+        const lost = results.filter(Result.isFailure)
+
+        expect(won.length).toBe(1)
+        expect(lost.length).toBe(1)
+        expect(lost.at(0)?.failure).toBeInstanceOf(VersionConflict)
+        expect((yield* storedEntry(note.id))?.version).toBe(note.version + 1)
+        expect((yield* entries.byRef(entryRef(note.id))).body).toBe(won.at(0)?.success.body ?? '')
       }),
     ))
 })

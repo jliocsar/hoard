@@ -6,6 +6,8 @@ import * as Layer from 'effect/Layer'
 import * as ManagedRuntime from 'effect/ManagedRuntime'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Aead from 'effect/crypto/Aead'
+import * as SecureRandom from 'effect/crypto/SecureRandom'
 import * as HttpClient from 'effect/http/HttpClient'
 import * as HttpClientError from 'effect/http/HttpClientError'
 import * as HttpClientRequest from 'effect/http/HttpClientRequest'
@@ -58,7 +60,11 @@ const TestConfig = ConfigProvider.layer(
   }),
 )
 
-const Storage = Layer.mergeAll(DatabaseLayer, Cipher.layer, FakeObjectStore)
+const CipherLayer = Cipher.layer.pipe(
+  Layer.provide(Aead.layerWebCrypto.pipe(Layer.provideMerge(SecureRandom.layerWebCrypto))),
+)
+
+const Storage = Layer.mergeAll(DatabaseLayer, CipherLayer, FakeObjectStore)
 
 const Services = Layer.mergeAll(
   Auth.layer,
