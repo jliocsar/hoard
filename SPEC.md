@@ -437,14 +437,40 @@ live here.
 - Never read `_tag`: a read keeps compiling when a variant is added, so the new case goes
   unhandled. Use `Match.tagsExhaustive`, so a new variant fails to compile. Privacy isn't the
   argument, since Effect declares `_tag` as a schema field and reads it in its own docs.
-- Encryption at rest and the session signature compare stay on `node:crypto`, the two files
-  excused from `node-builtin-import`. `seal` runs synchronously inside SQL templates, while
-  `effect/crypto`'s AES-GCM only runs on `crypto.subtle`, which is async, and writes
-  `ciphertext‖tag` where stored rows hold `iv‖tag‖ciphertext`. Moving means making `seal`
-  effectful and proving existing rows still open.
+- Encryption at rest runs on `effect/crypto`: AES-256-GCM from `Aead`, the iv from `SecureRandom`.
+  `Aead` writes `ciphertext‖tag`, and a stored row is `enc:v1:` then base64 of `iv‖tag‖ciphertext`,
+  so `Cipher` reassembles the bytes both ways. The format is the one `node:crypto` wrote, so there
+  was no migration and a binary from before the move reads new rows, which keeps a rollback safe.
+  Fixtures that implementation generated pin it, and the tests open what `Cipher` seals with
+  `node:crypto` directly, the one test excused from `node-builtin-import`.
+- `server.ts` provides `Aead.layerWebCrypto` and `SecureRandom.layerWebCrypto`. `BunCrypto.layerAead`
+  differs only for ChaCha20, which hoard doesn't use, and its module isn't on the unstable
+  allow-list.
+- `seal` fails with `SealFailed`, which holds no detail: the reason goes to the log, and the client
+  gets a 500. A schema getter can only fail with a `SchemaError`, which callers turn into a defect,
+  so `Sealed` and `Entry` only decode and refuse to encode. Callers encode with the domain codec and
+  call `seal`. What `effect/crypto` itself treats as a defect stays one, and still rolls back: no
+  `crypto.subtle` on the runtime, or an exception from it that `Aead` doesn't classify, which for
+  encrypt includes `OperationError`.
+- A decrypted value decodes through `Buffer`, not `TextDecoder`, which would strip a leading byte
+  order mark from a note and change what the row opens to.
+- Decrypting is asynchronous, so a read no longer runs into the write after it without yielding.
+  Two writes relied on that by accident. Two ticks on one task list both landed before and three of
+  four then got a 400, so that route retries on `VersionConflict`: each retry needs another writer
+  to have won, so it can't spin. Two connects for one email could insert two rows, so saving a grant
+  is a transaction. Anything new that reads and then writes needs a transaction or a retry.
+- A transaction holds the only SQLite connection across the cipher's `await`. Every query takes the
+  same semaphore, so other requests queue behind it rather than joining it, and a failure or
+  interrupt rolls it back. Reading a body inside a transaction waits the same way.
+- `unseal` is `Effect.fnUntraced`: a list page decrypts a section row by row, and nobody reads a span
+  per row. Decoding 1000 rows of 1 KiB took 35 ms with them and 21 ms without.
+- Cost, measured on an i7-13620H with Bun 1.4.4: `seal` of 1 KiB went from 3.7 µs to 18.4 µs and
+  opening it from 3.5 µs to 17.8 µs; at 100 KiB, 75 µs to 128 µs and 76 µs to 146 µs. Decoding 200
+  rows of 1 KiB went from 1.6 ms to 4.3 ms. A `put` on a file database stayed around 5 ms, since the
+  commit dominates it.
 - `Mac.timingSafeEqual` is an XOR-accumulate loop in JavaScript, and its docs note a runtime
   doesn't guarantee constant time. `node:crypto`'s compare is native, so the session signature
-  check keeps it.
+  check keeps it, and `Auth.ts` is the one source file excused from `node-builtin-import`.
 - `apps/web/src/api.ts` is shared with the CLI: it may import `domain.ts` and `effect`,
   never a service, or server code ends up in the binary.
 - `/api/auth/login` is the one `/api` route `SessionGate` lets through.
