@@ -131,6 +131,14 @@
       }
     },
     {
+      // The proof that the row format holds: it opens what `Cipher` seals with `node:crypto`, the
+      // implementation any binary older than `effect/crypto` runs, so a rollback can read new rows.
+      "files": ["apps/web/src/services/Cipher.test.ts"],
+      "rules": {
+        "effecttsgo/node-builtin-import": "off"
+      }
+    },
+    {
       "files": ["**/*.test.ts", "**/test/**/*.ts"],
       "rules": {
         "begone-slop/expect-padding": "error",
