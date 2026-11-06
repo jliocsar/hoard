@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "bun run fonts && bun run css:watch & bun run js:watch & bun run --hot src/server.ts",
     "start": "bun run src/server.ts",
+    "test": "bun test",
     "fonts": "mkdir -p public/files && cp node_modules/@fontsource/inter/files/inter-latin-{400,500,600}-normal.woff2 node_modules/@fontsource-variable/merriweather/files/merriweather-*-opsz-*.woff2 node_modules/@fontsource-variable/newsreader/files/newsreader-*-opsz-normal.woff2 public/files/",
     "css": "tailwindcss -i src/styles/app.css -o public/app.css --minify",
     "css:watch": "tailwindcss -i src/styles/app.css -o public/app.css --watch",

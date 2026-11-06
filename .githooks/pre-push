@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Whole-repo pass: catches drift on files the staged pass never saw, which is
+# exactly what the type-aware rules are for.
+
+node_modules/.bin/oxlint --deny-warnings --disable-nested-config || exit 1
+bunx oxfmt --check --disable-nested-config || exit 1
+bun run test || exit 1
