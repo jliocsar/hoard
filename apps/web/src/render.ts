@@ -1,6 +1,6 @@
 import type { Raw } from '@hoard/jsx'
 import * as Effect from 'effect/Effect'
-import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
+import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 
 export const respond = (markup: Raw, status: number) =>
   HttpServerResponse.text(markup.html, { contentType: 'text/html', status })

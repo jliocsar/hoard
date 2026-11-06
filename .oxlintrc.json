@@ -2,6 +2,7 @@
   "$schema": "./node_modules/@effect/tsgo/oxlint-schema.json",
   "extends": [
     "./node_modules/@effect/tsgo/oxlint-presets/recommended.json",
+    "./node_modules/@effect/tsgo/oxlint-presets/effect-native.json",
     "./node_modules/@jliocsar/begone-slop/preset.json"
   ],
   "plugins": ["typescript", "promise", "effecttsgo"],
@@ -10,14 +11,7 @@
     "suspicious": "error",
     "pedantic": "error"
   },
-  "ignorePatterns": [
-    "**/*.d.ts",
-    "**/dist/**",
-    "**/public/**",
-    ".agents/**",
-    ".claude/**",
-    ".husky/**"
-  ],
+  "ignorePatterns": ["**/*.d.ts", "**/dist/**", "**/public/**", ".agents/**", ".claude/**"],
   "jsPlugins": ["@jliocsar/begone-slop"],
   "rules": {
     "no-restricted-imports": [
@@ -25,14 +19,27 @@
       {
         "patterns": [
           {
-            "regex": "^effect$|^effect/testing$|^effect/unstable/[a-z0-9-]+$",
+            "regex": "^effect(/[a-z][a-z0-9-]*)?$",
             "allowTypeImports": true,
-            "message": "Import the leaf module, not the barrel: `effect/Effect`, `effect/unstable/schema/Schema`."
+            "message": "Import the leaf module, not the barrel: `effect/Effect`, `effect/Schema`."
           }
         ]
       }
     ],
+
+    // Native string and array methods read fine; `effect/String` and `effect/Array` are for
+    // what native lacks, not a rewrite of what it has.
+    "effecttsgo/prefer-effect-string": "off",
+    "effecttsgo/prefer-effect-array": "off",
+    // `JSON.stringify` on plain data outside an Effect can't fail; inside one, `global-json-in-effect`
+    // still asks for a Schema codec.
+    "effecttsgo/global-json": "off",
+    // A schema's derived type shares the schema's name, which this rule reads as a redeclaration.
+    // The compiler still rejects a real one.
+    "no-redeclare": "off",
+
     "promise/prefer-await-to-then": "error",
+
     "id-length": [
       "error",
       {
@@ -100,6 +107,15 @@
     ]
   },
   "overrides": [
+    {
+      // Encryption at rest stays on `node:crypto` for now. `seal` runs synchronously inside SQL
+      // templates and `effect/crypto`'s AES-GCM only runs on `crypto.subtle`, which is async, and
+      // lays bytes out differently from the rows already stored. Moving is a rewrite, not a swap.
+      "files": ["apps/web/src/services/Cipher.ts"],
+      "rules": {
+        "effecttsgo/node-builtin-import": "off"
+      }
+    },
     {
       "files": ["**/*.test.ts", "**/test/**/*.ts"],
       "rules": {

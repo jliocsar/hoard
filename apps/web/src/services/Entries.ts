@@ -1,4 +1,5 @@
 import slugify from '@sindresorhus/slugify'
+import * as Arr from 'effect/Array'
 import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
@@ -7,8 +8,8 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import * as Struct from 'effect/Struct'
-import * as SqlClient from 'effect/unstable/sql/SqlClient'
-import * as SqlSchema from 'effect/unstable/sql/SqlSchema'
+import * as SqlClient from 'effect/sql/SqlClient'
+import * as SqlSchema from 'effect/sql/SqlSchema'
 
 import type { Entry, EntryRef, MeetingRef, Tag } from '../domain.ts'
 import {
@@ -658,9 +659,9 @@ export class Entries extends Context.Service<Entries, EntriesShape>()('app/Entri
 
         yield* sql`DELETE FROM entry_tags WHERE entry_id = ${id}`
 
-        if (next.length > 0) {
+        if (Arr.isArrayNonEmpty(next)) {
           yield* sql`
-            INSERT INTO entry_tags ${sql.insert(next.map((tag) => ({ entry_id: id, tag })))}
+            INSERT INTO entry_tags ${sql.insert(Arr.map(next, (tag) => ({ entry_id: id, tag })))}
           `
         }
 

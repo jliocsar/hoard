@@ -3,6 +3,7 @@ import type { Node, Raw } from '@hoard/jsx'
 import * as Arr from 'effect/Array'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
+import * as Rec from 'effect/Record'
 
 import { Icon } from '../components/Icon.tsx'
 import { Layout, ThemeToggle } from '../components/Layout.tsx'
@@ -360,7 +361,7 @@ export const ListPage = Effect.fn('ListPage')(function* (props: {
               : `Nothing ${props.archived ? 'archived' : 'yet'}`}
           </GroupLabel>
         ) : null}
-        {Object.entries(groups).map(([month, grouped]) => (
+        {Rec.toEntries(groups).map(([month, grouped]) => (
           <>
             <GroupLabel>{month}</GroupLabel>
             {grouped.map((entry) =>

@@ -1,6 +1,6 @@
 import * as Effect from 'effect/Effect'
-import * as HttpRouter from 'effect/unstable/http/HttpRouter'
-import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
+import * as HttpRouter from 'effect/http/HttpRouter'
+import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 
 import { INLINE_SCRIPTS } from '../components/Layout.tsx'
 import { ObjectStore } from '../services/ObjectStore.ts'

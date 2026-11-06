@@ -56,7 +56,7 @@ const isSealed = (stored: string) => stored.startsWith(SEALED_PREFIX)
 
 export class Cipher extends Context.Service<Cipher, CipherShape>()('app/Cipher', {
   make: Effect.gen(function* () {
-    const key = yield* Config.redacted('ENCRYPTION_KEY').pipe(
+    const key = yield* Config.Redacted('ENCRYPTION_KEY').pipe(
       Config.map((value) => Buffer.from(Redacted.value(value), 'base64')),
     )
 
@@ -66,7 +66,7 @@ export class Cipher extends Context.Service<Cipher, CipherShape>()('app/Cipher',
 
     const SealedString = Schema.String.pipe(
       Schema.decode({
-        decode: SchemaGetter.transformOrFail((stored: string, options) =>
+        decode: SchemaGetter.transformEffect((stored: string, options) =>
           isSealed(stored)
             ? Effect.fromResult(unseal(key, stored)).pipe(
                 Effect.mapError(

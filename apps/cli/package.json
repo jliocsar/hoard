@@ -9,8 +9,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.0.0-rc.112",
+    "@effect/platform-bun": "catalog:",
     "@hoard/web": "workspace:*",
-    "effect": "4.0.0-rc.112"
+    "effect": "catalog:"
   }
 }

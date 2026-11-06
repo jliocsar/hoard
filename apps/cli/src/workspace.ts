@@ -6,8 +6,8 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
-import * as ChildProcess from 'effect/unstable/process/ChildProcess'
-import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
+import * as ChildProcess from 'effect/process/ChildProcess'
+import * as ChildProcessSpawner from 'effect/process/ChildProcessSpawner'
 
 import { EntryId } from '@hoard/web/domain'
 import type { EntrySlug } from '@hoard/web/domain'
@@ -49,8 +49,8 @@ const WORLD_WRITABLE = 0o002
 
 export const defaultDir = Effect.gen(function* () {
   const path = yield* Path.Path
-  const home = yield* Config.string('HOME')
-  const cache = yield* Config.string('XDG_CACHE_HOME').pipe(
+  const home = yield* Config.String('HOME')
+  const cache = yield* Config.String('XDG_CACHE_HOME').pipe(
     Config.withDefault(path.join(home, '.cache')),
   )
 
@@ -134,10 +134,7 @@ const unsafeDirReason = (isLink: boolean, info: FileSystem.File.Info) => {
 
 const checkDir = Effect.fn('workspace.checkDir')(function* (dir: string) {
   const fs = yield* FileSystem.FileSystem
-  const isLink = yield* Effect.match(fs.readLink(dir), {
-    onFailure: () => false,
-    onSuccess: () => true,
-  })
+  const isLink = yield* Effect.isSuccess(fs.readLink(dir))
   const info = yield* Effect.orDie(fs.stat(dir))
 
   yield* Option.match(unsafeDirReason(isLink, info), {
@@ -168,8 +165,7 @@ const readSidecar = (file: string) =>
   Effect.flatMap(Effect.flatMap(sidecarPath(file), readText), (text) =>
     Option.match(text, {
       onNone: () => Effect.succeed(Option.none<Sidecar>()),
-      onSome: (json) =>
-        Effect.map(Effect.orDie(Schema.decodeEffect(SidecarJson)(json)), Option.some),
+      onSome: (json) => Effect.asSome(Effect.orDie(Schema.decodeEffect(SidecarJson)(json))),
     }),
   )
 

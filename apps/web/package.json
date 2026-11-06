@@ -24,8 +24,8 @@
     "@codemirror/language": "6.12.4",
     "@codemirror/state": "6.7.4",
     "@codemirror/view": "6.43.11",
-    "@effect/platform-bun": "4.0.0-rc.112",
-    "@effect/sql-sqlite-bun": "4.0.0-rc.112",
+    "@effect/platform-bun": "catalog:",
+    "@effect/sql-sqlite-bun": "catalog:",
     "@fontsource-variable/merriweather": "^5.3.0",
     "@fontsource-variable/newsreader": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
@@ -36,14 +36,14 @@
     "@tailwindcss/typography": "^0.5.20",
     "basecoat-css": "^1.0.2",
     "codemirror": "^6.0.2",
-    "effect": "4.0.0-rc.112",
+    "effect": "catalog:",
     "htmx.org": "^2.0.10",
     "motion": "^13.4.0",
     "number-flow": "^0.6.2",
     "shiki": "^4.4.3"
   },
   "devDependencies": {
-    "@effect/platform-node": "4.0.0-rc.112",
+    "@effect/platform-node": "catalog:",
     "@tailwindcss/cli": "^4.3.3",
     "tailwindcss": "^4.3.3"
   }

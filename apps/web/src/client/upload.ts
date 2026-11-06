@@ -6,10 +6,10 @@ import * as Predicate from 'effect/Predicate'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
-import * as HttpBody from 'effect/unstable/http/HttpBody'
-import * as HttpClient from 'effect/unstable/http/HttpClient'
-import * as HttpClientResponse from 'effect/unstable/http/HttpClientResponse'
-import * as HttpApiClient from 'effect/unstable/httpapi/HttpApiClient'
+import * as HttpBody from 'effect/http/HttpBody'
+import * as HttpClient from 'effect/http/HttpClient'
+import * as HttpClientResponse from 'effect/http/HttpClientResponse'
+import * as HttpApiClient from 'effect/http-api/HttpApiClient'
 
 import { Api } from '../api.ts'
 import type { PresignTarget, RegisterFile } from '../api.ts'
@@ -97,7 +97,7 @@ const upload = Effect.fn('upload')(function* (files: readonly File[]) {
   const { presign, register } = yield* uploadEndpoints
   const byName = new Map(files.map((file) => [file.name, file] as const))
   const granted = yield* presign({ payload: { titles: files.map((file) => file.name) } })
-  const [failed, stored] = yield* Effect.partition(
+  const [stored, failed] = yield* Effect.partition(
     granted.targets,
     (target) => putTarget(target, byName),
     { concurrency: PUT_CONCURRENCY },
@@ -247,9 +247,9 @@ const toaster = Effect.callback<Option.Option<Toaster>>((resume) => {
   const element = document.getElementById('toaster')
 
   if (element === null) {
-    resume(Effect.succeed(Option.none()))
+    resume(Effect.succeedNone)
   } else if (isToaster(element)) {
-    resume(Effect.succeed(Option.some(element)))
+    resume(Effect.succeedSome(element))
   } else {
     element.addEventListener(
       'basecoat:initialized',

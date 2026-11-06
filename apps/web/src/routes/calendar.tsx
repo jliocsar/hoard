@@ -1,11 +1,11 @@
-import { randomBytes } from 'node:crypto'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
-import * as HttpRouter from 'effect/unstable/http/HttpRouter'
-import * as HttpServerRequest from 'effect/unstable/http/HttpServerRequest'
-import * as HttpServerResponse from 'effect/unstable/http/HttpServerResponse'
+import * as SecureRandom from 'effect/crypto/SecureRandom'
+import * as HttpRouter from 'effect/http/HttpRouter'
+import * as HttpServerRequest from 'effect/http/HttpServerRequest'
+import * as HttpServerResponse from 'effect/http/HttpServerResponse'
 
 import { EntrySlug, GoogleAccountId } from '../domain.ts'
 import { attachMeeting } from '../meetings.ts'
@@ -49,7 +49,8 @@ const redirectUri = Effect.map(requestOrigin, (origin) => `${origin}${CALLBACK_P
 
 const startRoute = Effect.gen(function* () {
   const google = yield* Google
-  const state = randomBytes(16).toString('base64url')
+  const random = yield* SecureRandom.SecureRandom
+  const state = Buffer.from(yield* random.randomBytes(16)).toString('base64url')
 
   return yield* HttpServerResponse.setCookie(
     seeOther(google.authUrl(yield* redirectUri, state)),

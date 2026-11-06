@@ -1,5 +1,6 @@
 import * as Arr from 'effect/Array'
 import * as Predicate from 'effect/Predicate'
+import * as Rec from 'effect/Record'
 
 import { escapeAttribute, escapeText } from './escape.ts'
 
@@ -73,7 +74,7 @@ const renderAttribute = (name: string, value: AttributeValue | Node): string => 
 }
 
 const serializeAttributes = (props: Attributes): string =>
-  Object.entries(props)
+  Rec.toEntries(props)
     .filter(([name]) => name !== 'children')
     .map(([name, value]) => renderAttribute(name, value))
     .join('')

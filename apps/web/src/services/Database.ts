@@ -3,7 +3,7 @@ import * as SqliteMigrator from '@effect/sql-sqlite-bun/SqliteMigrator'
 import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as SqlClient from 'effect/unstable/sql/SqlClient'
+import * as SqlClient from 'effect/sql/SqlClient'
 
 const createEntries = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
@@ -80,7 +80,7 @@ const createEntryTags = Effect.gen(function* () {
 })
 
 const ClientLayer = SqliteClient.layerConfig({
-  filename: Config.string('DATABASE_PATH').pipe(Config.withDefault('app.db')),
+  filename: Config.String('DATABASE_PATH').pipe(Config.withDefault('app.db')),
 })
 
 export const DatabaseLayer = SqliteMigrator.layer({

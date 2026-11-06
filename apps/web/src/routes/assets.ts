@@ -1,5 +1,5 @@
 import * as Layer from 'effect/Layer'
-import * as HttpStaticServer from 'effect/unstable/http/HttpStaticServer'
+import * as HttpStaticServer from 'effect/http/HttpStaticServer'
 
 const IMMUTABLE = 'public, max-age=31536000, immutable'
 const REVALIDATE = 'no-cache'

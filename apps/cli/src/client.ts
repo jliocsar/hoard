@@ -5,9 +5,9 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Redacted from 'effect/Redacted'
 import * as Schema from 'effect/Schema'
-import * as HttpClient from 'effect/unstable/http/HttpClient'
-import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
-import * as HttpApiClient from 'effect/unstable/httpapi/HttpApiClient'
+import * as HttpClient from 'effect/http/HttpClient'
+import * as HttpClientRequest from 'effect/http/HttpClientRequest'
+import * as HttpApiClient from 'effect/http-api/HttpApiClient'
 
 import { Api, ZONE_HEADER } from '@hoard/web/api'
 
@@ -26,8 +26,8 @@ const CONFIG_DIR_MODE = 0o700
 
 export const configPath = Effect.gen(function* () {
   const path = yield* Path.Path
-  const home = yield* Config.string('HOME')
-  const root = yield* Config.string('XDG_CONFIG_HOME').pipe(
+  const home = yield* Config.String('HOME')
+  const root = yield* Config.String('XDG_CONFIG_HOME').pipe(
     Config.withDefault(path.join(home, '.config')),
   )
 
@@ -65,8 +65,8 @@ export const writeStored = Effect.fn('writeStored')(function* (stored: Stored) {
 export const connection = Effect.gen(function* () {
   const stored = yield* readStored
   const env = yield* Config.all({
-    url: Config.option(Config.string('HOARD_URL')),
-    token: Config.option(Config.redacted('HOARD_TOKEN')),
+    url: Config.option(Config.String('HOARD_URL')),
+    token: Config.option(Config.Redacted('HOARD_TOKEN')),
   })
   const url = Option.orElse(env.url, () => Option.map(stored, (value) => value.url))
   const token = Option.orElse(

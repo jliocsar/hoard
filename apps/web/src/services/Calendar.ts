@@ -4,8 +4,8 @@ import * as Effect from 'effect/Effect'
 import { flow } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Schema from 'effect/Schema'
-import * as SqlClient from 'effect/unstable/sql/SqlClient'
-import * as SqlSchema from 'effect/unstable/sql/SqlSchema'
+import * as SqlClient from 'effect/sql/SqlClient'
+import * as SqlSchema from 'effect/sql/SqlSchema'
 
 import { GOOGLE_ACCOUNT_KEYS, googleAccountFields, googleAccountId } from '../domain.ts'
 import type { CalendarEvent, GoogleAccount, GoogleAccountId } from '../domain.ts'
@@ -138,5 +138,5 @@ export class Calendar extends Context.Service<Calendar, CalendarShape>()('app/Ca
     return { accounts, connect, disconnect, events } satisfies CalendarShape
   }),
 }) {
-  static readonly layer = Layer.effect(this)(this.make).pipe(Layer.provideMerge(Google.layer))
+  static readonly layer = Layer.effect(this)(this.make)
 }

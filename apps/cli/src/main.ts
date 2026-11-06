@@ -11,15 +11,15 @@ import * as Redacted from 'effect/Redacted'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
 import type * as Types from 'effect/Types'
-import * as Argument from 'effect/unstable/cli/Argument'
-import * as Command from 'effect/unstable/cli/Command'
-import * as Flag from 'effect/unstable/cli/Flag'
-import * as Prompt from 'effect/unstable/cli/Prompt'
-import * as FetchHttpClient from 'effect/unstable/http/FetchHttpClient'
-import * as HttpBody from 'effect/unstable/http/HttpBody'
-import * as HttpClient from 'effect/unstable/http/HttpClient'
-import type * as HttpClientError from 'effect/unstable/http/HttpClientError'
-import * as HttpClientResponse from 'effect/unstable/http/HttpClientResponse'
+import * as Argument from 'effect/cli/Argument'
+import * as Command from 'effect/cli/Command'
+import * as Flag from 'effect/cli/Flag'
+import * as Prompt from 'effect/cli/Prompt'
+import * as FetchHttpClient from 'effect/http/FetchHttpClient'
+import * as HttpBody from 'effect/http/HttpBody'
+import * as HttpClient from 'effect/http/HttpClient'
+import type * as HttpClientError from 'effect/http/HttpClientError'
+import * as HttpClientResponse from 'effect/http/HttpClientResponse'
 
 import {
   CreateRequest,
@@ -141,12 +141,12 @@ const print = printTo(Console.log)
 
 const printError = printTo(Console.error)(ErrorOutput)
 
-const refArgument = Argument.string('ref').pipe(
+const refArgument = Argument.String('ref').pipe(
   Argument.withDescription('slug or id'),
   Argument.map(entryRef),
 )
 
-const dirFlag = Flag.string('dir').pipe(
+const dirFlag = Flag.String('dir').pipe(
   Flag.withDescription('where pulled files live (default: ~/.cache/hoard)'),
   Flag.optional,
 )
@@ -154,9 +154,9 @@ const dirFlag = Flag.string('dir').pipe(
 const resolveDir = (dir: Option.Option<string>) =>
   Option.match(dir, { onNone: () => defaultDir, onSome: Effect.succeed })
 
-const tagFlag = Flag.string('tag').pipe(Flag.withDescription('repeatable'), Flag.atLeast(0))
+const tagFlag = Flag.String('tag').pipe(Flag.withDescription('repeatable'), Flag.atLeast(0))
 
-const typeFlag = Flag.choice('type', EntryType.literals).pipe(Flag.optional)
+const typeFlag = Flag.Literals('type', EntryType.literals).pipe(Flag.optional)
 
 const parseTags = Effect.fn('parseTags')(function* (raw: readonly string[]) {
   const tags: Tag[] = []
@@ -275,7 +275,7 @@ const listQuery = Effect.fn('listQuery')(function* (flags: {
 
 const login = Command.make(
   'login',
-  { url: Flag.string('url').pipe(Flag.optional) },
+  { url: Flag.String('url').pipe(Flag.optional) },
   Effect.fn(function* ({ url }) {
     const stored = yield* readStored
     const target = Option.orElse(url, () => Option.map(stored, (value) => value.url))
@@ -284,7 +284,7 @@ const login = Command.make(
       return yield* new UsageError({ message: 'first login needs --url' })
     }
 
-    const password = yield* Prompt.run(Prompt.password({ message: 'password' }))
+    const password = yield* Prompt.run(Prompt.Password({ message: 'password' }))
     const client = yield* makeClient(target.value, Option.none())
     const response = yield* client.auth.login({
       payload: { password: Redacted.value(password) },
@@ -299,11 +299,11 @@ const list = Command.make(
   'list',
   {
     type: typeFlag,
-    tag: Flag.string('tag').pipe(Flag.optional),
-    archived: Flag.boolean('archived').pipe(Flag.withDefault(false)),
-    title: Flag.string('title').pipe(Flag.withDescription('substring match'), Flag.optional),
-    limit: Flag.integer('limit').pipe(Flag.optional),
-    cursor: Flag.string('cursor').pipe(Flag.optional),
+    tag: Flag.String('tag').pipe(Flag.optional),
+    archived: Flag.Boolean('archived').pipe(Flag.withDefault(false)),
+    title: Flag.String('title').pipe(Flag.withDescription('substring match'), Flag.optional),
+    limit: Flag.Int('limit').pipe(Flag.optional),
+    cursor: Flag.String('cursor').pipe(Flag.optional),
   },
   Effect.fn(function* (flags) {
     const query = yield* listQuery(flags)
@@ -328,8 +328,8 @@ const get = Command.make(
 const create = Command.make(
   'new',
   {
-    type: Argument.choice('type', CreateRequest.fields.type.literals),
-    title: Flag.string('title').pipe(Flag.optional),
+    type: Argument.Literals('type', CreateRequest.fields.type.literals),
+    title: Flag.String('title').pipe(Flag.optional),
     tag: tagFlag,
     dir: dirFlag,
   },
@@ -382,7 +382,7 @@ const meetings = Command.make(
 
 const attach = Command.make(
   'attach',
-  { ref: refArgument, eventId: Argument.string('eventId') },
+  { ref: refArgument, eventId: Argument.String('eventId') },
   Effect.fn(function* ({ ref, eventId }) {
     const client = yield* authedClient
     const entry = yield* client.entries.attach({ params: { ref }, payload: { eventId } })
@@ -393,7 +393,7 @@ const attach = Command.make(
 
 const pullCommand = Command.make(
   'pull',
-  { ref: refArgument, dir: dirFlag, force: Flag.boolean('force').pipe(Flag.withDefault(false)) },
+  { ref: refArgument, dir: dirFlag, force: Flag.Boolean('force').pipe(Flag.withDefault(false)) },
   Effect.fn(function* ({ ref, dir, force }) {
     const found = yield* detail(ref)
     const path = yield* pullEntry(found.entry, dir, force)
@@ -404,7 +404,7 @@ const pullCommand = Command.make(
 
 const pushCommand = Command.make(
   'push',
-  { target: Argument.string('slug|file'), dir: dirFlag },
+  { target: Argument.String('slug|file'), dir: dirFlag },
   Effect.fn(function* ({ target, dir }) {
     const path = yield* Path.Path
     const file =
@@ -419,7 +419,7 @@ const pushCommand = Command.make(
 
 const rename = Command.make(
   'rename',
-  { ref: refArgument, title: Argument.string('title') },
+  { ref: refArgument, title: Argument.String('title') },
   Effect.fn(function* ({ ref, title }) {
     const client = yield* authedClient
     const { entry } = yield* detail(ref)
@@ -458,7 +458,7 @@ const tagsCommand = Command.make(
 
 const tagCommand = Command.make(
   'tag',
-  { ref: refArgument, tags: Argument.string('tags').pipe(Argument.variadic()) },
+  { ref: refArgument, tags: Argument.String('tags').pipe(Argument.variadic()) },
   Effect.fn(function* (input) {
     const parsed = yield* parseTags(input.tags)
     const client = yield* authedClient
@@ -495,7 +495,7 @@ const restore = Command.make(
 
 const upload = Command.make(
   'upload',
-  { file: Argument.string('file'), title: Flag.string('title').pipe(Flag.optional), tag: tagFlag },
+  { file: Argument.String('file'), title: Flag.String('title').pipe(Flag.optional), tag: tagFlag },
   Effect.fn(function* (input) {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
@@ -540,7 +540,7 @@ const download = Command.make(
   'download',
   {
     ref: refArgument,
-    output: Flag.string('output').pipe(Flag.withAlias('o'), Flag.optional),
+    output: Flag.String('output').pipe(Flag.withAlias('o'), Flag.optional),
   },
   Effect.fn(function* ({ ref, output }) {
     const found = yield* detail(ref)
@@ -565,7 +565,7 @@ const download = Command.make(
 
 const share = Command.make(
   'share',
-  { ref: refArgument, ttl: Flag.choice('ttl', ShareTtl.literals).pipe(Flag.withDefault('7d')) },
+  { ref: refArgument, ttl: Flag.Literals('ttl', ShareTtl.literals).pipe(Flag.withDefault('7d')) },
   Effect.fn(function* ({ ref, ttl }) {
     const client = yield* authedClient
     const link = yield* client.artifacts.share({ params: { ref }, payload: { ttl } })
@@ -576,7 +576,7 @@ const share = Command.make(
 
 const unshare = Command.make(
   'unshare',
-  { linkId: Argument.string('linkId') },
+  { linkId: Argument.String('linkId') },
   Effect.fn(function* ({ linkId }) {
     const client = yield* authedClient
     const id = yield* Schema.decodeEffect(ShareLinkId)(linkId)

@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'node:crypto'
 import * as Config from 'effect/Config'
 import * as Context from 'effect/Context'
 import * as DateTime from 'effect/DateTime'
@@ -7,6 +6,7 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Redacted from 'effect/Redacted'
+import * as Mac from 'effect/crypto/Mac'
 
 import { TooManyAttempts } from '../domain.ts'
 
@@ -27,18 +27,14 @@ export const SESSION_TTL = Duration.days(365)
 const sign = (secret: string, issuedAt: string) =>
   new Bun.CryptoHasher('sha256', secret).update(issuedAt).digest('base64url')
 
-const sameString = (left: string, right: string) => {
-  const leftBytes = Buffer.from(left)
-  const rightBytes = Buffer.from(right)
-
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
-}
+const sameString = (left: string, right: string) =>
+  Mac.timingSafeEqual(Buffer.from(left), Buffer.from(right))
 
 export class Auth extends Context.Service<Auth, AuthShape>()('app/Auth', {
   make: Effect.gen(function* () {
     const config = yield* Config.all({
-      passwordHash: Config.redacted('PASSWORD_HASH'),
-      sessionSecret: Config.redacted('SESSION_SECRET'),
+      passwordHash: Config.Redacted('PASSWORD_HASH'),
+      sessionSecret: Config.Redacted('SESSION_SECRET'),
     })
     const passwordHash = Redacted.value(config.passwordHash)
     const secret = Redacted.value(config.sessionSecret)

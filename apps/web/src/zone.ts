@@ -2,7 +2,7 @@ import * as Config from 'effect/Config'
 import * as DateTime from 'effect/DateTime'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
-import * as HttpServerRequest from 'effect/unstable/http/HttpServerRequest'
+import * as HttpServerRequest from 'effect/http/HttpServerRequest'
 
 import { ZONE_HEADER } from './api.ts'
 
@@ -16,7 +16,7 @@ export const requestZone = Effect.map(HttpServerRequest.HttpServerRequest, (requ
   ),
 )
 
-const PublicOrigin = Config.option(Config.string('PUBLIC_ORIGIN'))
+const PublicOrigin = Config.option(Config.String('PUBLIC_ORIGIN'))
 
 const LOCAL_HOST = /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/u
 

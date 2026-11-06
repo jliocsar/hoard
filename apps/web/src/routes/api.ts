@@ -1,7 +1,7 @@
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
-import * as HttpApiBuilder from 'effect/unstable/httpapi/HttpApiBuilder'
+import * as HttpApiBuilder from 'effect/http-api/HttpApiBuilder'
 
 import { Api, LIST_LIMIT_DEFAULT } from '../api.ts'
 import { artifactFile, contentDisposition } from '../artifacts.ts'
@@ -131,10 +131,10 @@ const EntriesHandlers = HttpApiBuilder.group(
           const zone = yield* requestZone
           const attached = yield* attachMeeting(entry.id, payload.eventId, zone)
 
-          return yield* Option.match(attached, {
-            onNone: () => Effect.fail(new EventNotFound({ eventId: payload.eventId })),
-            onSome: Effect.succeed,
-          })
+          return yield* Effect.fromOption(
+            attached,
+            () => new EventNotFound({ eventId: payload.eventId }),
+          )
         }),
       )
   }),

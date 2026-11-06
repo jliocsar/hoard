@@ -1,11 +1,31 @@
 {
+  "$schema": "./node_modules/@effect/tsgo/schema.json",
   "extends": "@jliocsar/begone-slop/tsconfig",
   "compilerOptions": {
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": ["bun"],
     "jsx": "react-jsx",
     "jsxImportSource": "@hoard/jsx",
-    "plugins": [{ "name": "@effect/language-service", "diagnostics": false }]
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnostics": false,
+        "brandedSchemaClasses": ["Class", "Error", "Opaque"],
+        "namespaceImportPackages": ["effect"],
+        "allowedUnstableApis": [
+          "@effect/platform-bun",
+          "@effect/sql-sqlite-bun",
+          "effect/FileSystem",
+          "effect/Path",
+          "effect/cli",
+          "effect/crypto",
+          "effect/http",
+          "effect/http-api",
+          "effect/process",
+          "effect/sql"
+        ]
+      }
+    ]
   },
   "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts"]
 }

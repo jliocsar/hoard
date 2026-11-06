@@ -13,9 +13,9 @@ import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Schema from 'effect/Schema'
 import * as Stream from 'effect/Stream'
-import * as FetchHttpClient from 'effect/unstable/http/FetchHttpClient'
-import * as HttpClient from 'effect/unstable/http/HttpClient'
-import * as HttpApiClient from 'effect/unstable/httpapi/HttpApiClient'
+import * as FetchHttpClient from 'effect/http/FetchHttpClient'
+import * as HttpClient from 'effect/http/HttpClient'
+import * as HttpApiClient from 'effect/http-api/HttpApiClient'
 
 import { Api } from '../api.ts'
 import { entryId, normaliseTag, VersionConflict } from '../domain.ts'
@@ -71,6 +71,11 @@ declare const htmx: {
     context: { source: Element; target: string; swap: 'innerHTML' },
   ): Promise<void>
 }
+
+class NavigationFailed extends Schema.TaggedError<NavigationFailed>()('NavigationFailed', {
+  href: Schema.String,
+  cause: Schema.Unknown,
+}) {}
 
 const STATUS_TEXT = {
   saving: 'Saving…',
@@ -548,9 +553,10 @@ const filterHref = (base: string, selectedTags: readonly string[]) => {
 }
 
 const navigate = (menu: HTMLElement, href: string) =>
-  Effect.tryPromise(() =>
-    htmx.ajax('GET', href, { source: menu, target: 'body', swap: 'innerHTML' }),
-  ).pipe(
+  Effect.tryPromise({
+    try: () => htmx.ajax('GET', href, { source: menu, target: 'body', swap: 'innerHTML' }),
+    catch: (cause) => new NavigationFailed({ href, cause }),
+  }).pipe(
     Effect.orElseSucceed(() => {
       window.location.assign(href)
     }),
@@ -665,7 +671,7 @@ const mountTagMenu = Effect.fn('mountTagMenu')(function* (menu: HTMLElement) {
     ),
   )
   yield* Effect.forkScoped(
-    Stream.fromEventListener(menu, 'click').pipe(
+    Stream.fromEventListener<Event>(menu, 'click').pipe(
       Stream.filter(
         (event) =>
           event.target instanceof HTMLElement &&

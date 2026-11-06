@@ -6,10 +6,9 @@ import { flow } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Redacted from 'effect/Redacted'
 import * as Schema from 'effect/Schema'
-import * as FetchHttpClient from 'effect/unstable/http/FetchHttpClient'
-import * as HttpClient from 'effect/unstable/http/HttpClient'
-import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
-import * as HttpClientResponse from 'effect/unstable/http/HttpClientResponse'
+import * as HttpClient from 'effect/http/HttpClient'
+import * as HttpClientRequest from 'effect/http/HttpClientRequest'
+import * as HttpClientResponse from 'effect/http/HttpClientResponse'
 
 import type { Attendee } from '../domain.ts'
 
@@ -153,8 +152,8 @@ const expiry = (expiresIn: number) =>
 export class Google extends Context.Service<Google, GoogleShape>()('app/Google', {
   make: Effect.gen(function* () {
     const config = yield* Config.all({
-      clientId: Config.string('GOOGLE_CLIENT_ID'),
-      clientSecret: Config.redacted('GOOGLE_CLIENT_SECRET'),
+      clientId: Config.String('GOOGLE_CLIENT_ID'),
+      clientSecret: Config.Redacted('GOOGLE_CLIENT_SECRET'),
     })
     const clientSecret = Redacted.value(config.clientSecret)
     const client = (yield* HttpClient.HttpClient).pipe(
@@ -278,5 +277,5 @@ export class Google extends Context.Service<Google, GoogleShape>()('app/Google',
     } satisfies GoogleShape
   }),
 }) {
-  static readonly layer = Layer.effect(this)(this.make).pipe(Layer.provide(FetchHttpClient.layer))
+  static readonly layer = Layer.effect(this)(this.make)
 }

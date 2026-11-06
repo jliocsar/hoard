@@ -59,19 +59,19 @@ export const EntryType = Schema.Literals(['note', 'meeting', 'task', 'artifact']
 
 export const EntryId = Schema.String.pipe(Schema.brand('EntryId'))
 
-export const entryId = Schema.decodeSync(EntryId)
+export const entryId = (value: string) => EntryId.make(value)
 
 export const EntrySlug = Schema.String.pipe(Schema.brand('EntrySlug'))
 
-export const entrySlug = Schema.decodeSync(EntrySlug)
+export const entrySlug = (value: string) => EntrySlug.make(value)
 
 export const EntryRef = Schema.String.pipe(Schema.brand('EntryRef'))
 
-export const entryRef = Schema.decodeSync(EntryRef)
+export const entryRef = (value: string) => EntryRef.make(value)
 
 export const GoogleAccountId = Schema.String.pipe(Schema.brand('GoogleAccountId'))
 
-export const googleAccountId = Schema.decodeSync(GoogleAccountId)
+export const googleAccountId = (value: string) => GoogleAccountId.make(value)
 
 export const TAG_PATTERN = /^[a-z0-9-]{1,32}$/u
 
@@ -170,11 +170,11 @@ export class VersionConflict extends Schema.TaggedError<VersionConflict>()('Vers
 
 export const ShareLinkId = Schema.String.pipe(Schema.brand('ShareLinkId'))
 
-export const shareLinkId = Schema.decodeSync(ShareLinkId)
+export const shareLinkId = (value: string) => ShareLinkId.make(value)
 
 export const ShareToken = Schema.String.pipe(Schema.brand('ShareToken'))
 
-export const shareToken = Schema.decodeSync(ShareToken)
+export const shareToken = (value: string) => ShareToken.make(value)
 
 export const ShareTtl = Schema.Literals(['1h', '1d', '7d', 'never'])
 

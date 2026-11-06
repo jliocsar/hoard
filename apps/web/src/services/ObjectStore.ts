@@ -11,6 +11,11 @@ export class UploadFailed extends Schema.TaggedError<UploadFailed>()('UploadFail
   cause: Schema.Unknown,
 }) {}
 
+export class HeadFailed extends Schema.TaggedError<HeadFailed>()('HeadFailed', {
+  key: Schema.String,
+  cause: Schema.Unknown,
+}) {}
+
 export interface ObjectHead {
   readonly bytes: number
   readonly mime: string
@@ -37,10 +42,10 @@ export class ObjectStore extends Context.Service<ObjectStore, ObjectStoreShape>(
   {
     make: Effect.gen(function* () {
       const config = yield* Config.all({
-        accessKeyId: Config.redacted('AWS_ACCESS_KEY_ID'),
-        secretAccessKey: Config.redacted('AWS_SECRET_ACCESS_KEY'),
-        endpoint: Config.string('AWS_ENDPOINT_URL_S3').pipe(Config.withDefault(TIGRIS_ENDPOINT)),
-        bucket: Config.string('BUCKET_NAME'),
+        accessKeyId: Config.Redacted('AWS_ACCESS_KEY_ID'),
+        secretAccessKey: Config.Redacted('AWS_SECRET_ACCESS_KEY'),
+        endpoint: Config.String('AWS_ENDPOINT_URL_S3').pipe(Config.withDefault(TIGRIS_ENDPOINT)),
+        bucket: Config.String('BUCKET_NAME'),
       })
 
       const client = new Bun.S3Client({
@@ -71,7 +76,10 @@ export class ObjectStore extends Context.Service<ObjectStore, ObjectStoreShape>(
       )
 
       const head = Effect.fn('ObjectStore.head')((key: string) =>
-        Effect.tryPromise(() => client.stat(key)).pipe(
+        Effect.tryPromise({
+          try: () => client.stat(key),
+          catch: (cause) => new HeadFailed({ key, cause }),
+        }).pipe(
           Effect.map((stat) => Option.some({ bytes: stat.size, mime: stat.type })),
           Effect.catchCause((cause) =>
             Effect.as(

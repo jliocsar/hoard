@@ -6,11 +6,11 @@ import * as Layer from 'effect/Layer'
 import * as ManagedRuntime from 'effect/ManagedRuntime'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as HttpClient from 'effect/unstable/http/HttpClient'
-import * as HttpClientError from 'effect/unstable/http/HttpClientError'
-import * as HttpClientRequest from 'effect/unstable/http/HttpClientRequest'
-import * as HttpRouter from 'effect/unstable/http/HttpRouter'
-import * as HttpApiClient from 'effect/unstable/httpapi/HttpApiClient'
+import * as HttpClient from 'effect/http/HttpClient'
+import * as HttpClientError from 'effect/http/HttpClientError'
+import * as HttpClientRequest from 'effect/http/HttpClientRequest'
+import * as HttpRouter from 'effect/http/HttpRouter'
+import * as HttpApiClient from 'effect/http-api/HttpApiClient'
 
 import { Api } from './api.ts'
 import { EntryNotFound, TooManyAttempts, WrongPassword, entryRef } from './domain.ts'
@@ -232,7 +232,7 @@ describe('entries', () => {
           .pipe(
             Effect.as(Option.none<number>()),
             Effect.catchTag('VersionConflict', (conflict) =>
-              Effect.succeed(Option.some(conflict.entry.version)),
+              Effect.succeedSome(conflict.entry.version),
             ),
           )
 

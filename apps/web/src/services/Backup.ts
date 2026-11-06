@@ -5,7 +5,7 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Schedule from 'effect/Schedule'
-import * as SqlClient from 'effect/unstable/sql/SqlClient'
+import * as SqlClient from 'effect/sql/SqlClient'
 
 import { ObjectStore } from './ObjectStore.ts'
 
@@ -27,7 +27,7 @@ const snapshotDatabaseToBucket = Effect.fn('Backup.snapshotDatabaseToBucket')(fu
 })
 
 const runBackupsForever = Effect.gen(function* () {
-  const enabled = yield* Config.boolean('BACKUP_ENABLED').pipe(Config.withDefault(false))
+  const enabled = yield* Config.Boolean('BACKUP_ENABLED').pipe(Config.withDefault(false))
 
   if (enabled) {
     yield* snapshotDatabaseToBucket().pipe(
