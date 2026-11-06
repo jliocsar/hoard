@@ -123,7 +123,9 @@
       // Encryption at rest stays on `node:crypto` for now. `seal` runs synchronously inside SQL
       // templates and `effect/crypto`'s AES-GCM only runs on `crypto.subtle`, which is async, and
       // lays bytes out differently from the rows already stored. Moving is a rewrite, not a swap.
-      "files": ["apps/web/src/services/Cipher.ts"],
+      // The session signature compare stays too: `Mac.timingSafeEqual` is a loop in JavaScript and
+      // its docs don't promise constant time, where `node:crypto`'s is native.
+      "files": ["apps/web/src/services/Cipher.ts", "apps/web/src/services/Auth.ts"],
       "rules": {
         "effecttsgo/node-builtin-import": "off"
       }

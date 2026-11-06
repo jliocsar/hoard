@@ -437,14 +437,14 @@ live here.
 - Never read `_tag`: a read keeps compiling when a variant is added, so the new case goes
   unhandled. Use `Match.tagsExhaustive`, so a new variant fails to compile. Privacy isn't the
   argument, since Effect declares `_tag` as a schema field and reads it in its own docs.
-- Encryption at rest stays on `node:crypto`, the one file excused from
-  `node-builtin-import`. `seal` runs synchronously inside SQL templates, while
+- Encryption at rest and the session signature compare stay on `node:crypto`, the two files
+  excused from `node-builtin-import`. `seal` runs synchronously inside SQL templates, while
   `effect/crypto`'s AES-GCM only runs on `crypto.subtle`, which is async, and writes
   `ciphertext‖tag` where stored rows hold `iv‖tag‖ciphertext`. Moving means making `seal`
   effectful and proving existing rows still open.
-- The session signature check uses `Mac.timingSafeEqual`, an XOR-accumulate loop in
-  JavaScript. Its docs note a runtime doesn't guarantee constant time, where `node:crypto`'s
-  compare is native.
+- `Mac.timingSafeEqual` is an XOR-accumulate loop in JavaScript, and its docs note a runtime
+  doesn't guarantee constant time. `node:crypto`'s compare is native, so the session signature
+  check keeps it.
 - `apps/web/src/api.ts` is shared with the CLI: it may import `domain.ts` and `effect`,
   never a service, or server code ends up in the binary.
 - `/api/auth/login` is the one `/api` route `SessionGate` lets through.
