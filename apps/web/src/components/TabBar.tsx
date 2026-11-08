@@ -8,7 +8,7 @@ export type Tab = 'home' | EntryType
 export const DOCK = [
   'max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-40',
   'max-sm:border-t max-sm:bg-background/90 max-sm:backdrop-blur-md',
-  'max-sm:pb-[env(safe-area-inset-bottom)]',
+  'max-sm:pb-[var(--dock-inset)]',
 ].join(' ')
 
 const ITEM = [

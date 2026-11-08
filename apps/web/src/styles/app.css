@@ -78,6 +78,24 @@
   --selection: color-mix(in oklab, var(--caret) 35%, transparent);
 }
 
+/*
+ * iOS 26 Home Screen apps with a black-translucent status bar lay the page out one status bar short
+ * of the screen, so the bottom dock floated above an empty strip. A document at least 100vh tall
+ * gets WebKit to lay out the whole display. Where that isn't enough, VIEWPORT_GAP in Layout.tsx
+ * measures the shortfall into --viewport-gap: the short layout already ends above the home
+ * indicator, so the dock gives up that much of its bottom inset. Everywhere else the gap is 0.
+ */
+:root {
+  --viewport-gap: 0px;
+  --dock-inset: max(0px, calc(env(safe-area-inset-bottom) - var(--viewport-gap)));
+}
+
+@media (display-mode: standalone) {
+  html {
+    min-height: 100vh;
+  }
+}
+
 @layer base {
   button:not(:disabled),
   [role='button']:not(:disabled) {

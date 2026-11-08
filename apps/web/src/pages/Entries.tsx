@@ -96,7 +96,7 @@ const MEETING_PANEL = [
 
 const ENTRY_DOCK = [
   DOCK,
-  'max-sm:min-h-[calc(3.5rem+env(safe-area-inset-bottom))] max-sm:flex-nowrap max-sm:gap-0.5 max-sm:overflow-x-auto max-sm:px-2',
+  'max-sm:min-h-[calc(3.5rem+var(--dock-inset))] max-sm:flex-nowrap max-sm:gap-0.5 max-sm:overflow-x-auto max-sm:px-2',
 ].join(' ')
 
 const SHARE_ROW =
@@ -163,7 +163,7 @@ export const Page = (props: {
   readonly children?: Node
 }) => (
   <main
-    class={`mx-auto max-w-[1200px] px-4 pt-[calc(1.5rem+env(safe-area-inset-top))] sm:px-8 sm:pt-[calc(2.5rem+env(safe-area-inset-top))] ${props.fill === true ? 'flex min-h-dvh flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-[calc(2.5rem+env(safe-area-inset-bottom))]' : 'pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(6rem+env(safe-area-inset-bottom))]'}`}
+    class={`mx-auto max-w-[1200px] px-4 pt-[calc(1.5rem+env(safe-area-inset-top))] sm:px-8 sm:pt-[calc(2.5rem+env(safe-area-inset-top))] ${props.fill === true ? 'flex min-h-dvh flex-col pb-[calc(5rem+var(--dock-inset))] sm:pb-[calc(2.5rem+env(safe-area-inset-bottom))]' : 'pb-[calc(7.5rem+var(--dock-inset))] sm:pb-[calc(6rem+env(safe-area-inset-bottom))]'}`}
   >
     <div class="mb-6 flex h-7 sm:mb-10 items-center justify-between">
       {props.crumbs ?? <BackLink back={props.back} />}

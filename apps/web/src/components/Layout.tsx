@@ -30,6 +30,22 @@ const ZONE_BOOT = `(() => {
   }
 })()`
 
+const VIEWPORT_GAP = `(() => {
+  if (navigator.standalone !== true) return
+  const measure = () => {
+    const portrait = innerHeight >= innerWidth
+    const tall = Math.max(screen.width, screen.height)
+    const short = Math.min(screen.width, screen.height)
+    const gap = Math.round((portrait ? tall : short) - innerHeight)
+    const shortfall = gap > 0 && gap <= 80 ? gap : 0
+    document.documentElement.style.setProperty('--viewport-gap', shortfall + 'px')
+  }
+  measure()
+  addEventListener('load', measure)
+  addEventListener('resize', measure)
+  addEventListener('pageshow', measure)
+})()`
+
 const HTMX_CONFIG = '{"historyCacheSize":0,"globalViewTransitions":true}'
 
 const TRANSITION_GATE = `document.addEventListener('htmx:beforeTransition', (event) => {
@@ -67,6 +83,7 @@ const INTERACTIONS = `(() => {
 export const INLINE_SCRIPTS: readonly string[] = [
   THEME_BOOT,
   ZONE_BOOT,
+  VIEWPORT_GAP,
   TRANSITION_GATE,
   INTERACTIONS,
 ]
