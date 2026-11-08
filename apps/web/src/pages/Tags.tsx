@@ -24,9 +24,13 @@ const TAG_STRIP =
 const TAG_CHIP =
   'inline-flex h-8 shrink-0 snap-start items-center gap-1.5 rounded-full border px-3 text-xs font-medium whitespace-nowrap text-muted-foreground aria-pressed:bg-muted aria-pressed:text-foreground'
 
+export const SHEET =
+  'max-sm:top-auto max-sm:right-2 max-sm:bottom-[calc(3.5rem+env(safe-area-inset-bottom)+8px)] max-sm:left-2 max-sm:w-auto max-sm:max-w-none max-sm:origin-bottom'
+
 export const TAG_PANEL = [
   'pop-panel fixed inset-auto m-0 w-[240px] rounded-lg border bg-background p-0 text-[14px] shadow-lg',
   '[position-anchor:--tags] [top:calc(anchor(bottom)+6px)] [position-try-fallbacks:flip-inline]',
+  SHEET,
 ].join(' ')
 
 export const TAG_ROW = [

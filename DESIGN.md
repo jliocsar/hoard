@@ -99,6 +99,15 @@ On a note it's only the theme toggle.
 - list: `[archive Archived] · 9 notes · Newest first` … `[+ New  n]` (outline with `border-transparent`)
 - note: `Edited Sep 9` … `[status] [Source | Preview] [trash]`
 
+**phones** (below `sm`) — the section links leave the crumbs for a bottom tab bar:
+`Home · Notes · Meetings · Tasks · Artifacts`, 56px plus the safe area,
+`--background` at 90% with a blur and a hairline on top. The current section is
+`--foreground`, the rest `--muted-foreground`. Search moves up to the crumbs as
+the first icon in the actions cluster. On an entry page the meta row's
+editing controls take that slot instead (the back link already covers navigation),
+and their panels open as a sheet just above it. Long labels shrink there: `Meeting`,
+icon-only `Source | Preview`, `Open`, `Download`.
+
 ## Notes list
 
 Rows grouped by month. Group label sits `22px 0 6px` (no top padding on the

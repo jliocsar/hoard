@@ -96,7 +96,7 @@ export const HomePage = Effect.fn('HomePage')(function* (props: {
       <Page
         crumbs={
           <nav
-            class="flex h-7 items-center gap-2 text-xs font-medium whitespace-nowrap text-muted-foreground sm:gap-2.5"
+            class="hidden h-7 items-center gap-2.5 text-xs font-medium whitespace-nowrap text-muted-foreground sm:flex"
             aria-label="Sections"
           >
             {NAV.map((section, index) => (
@@ -117,6 +117,7 @@ export const HomePage = Effect.fn('HomePage')(function* (props: {
           </nav>
         }
         actions={<SignOut />}
+        active="home"
         heading={heading}
         meta={
           <button

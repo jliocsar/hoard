@@ -7,6 +7,8 @@ import * as Rec from 'effect/Record'
 
 import { Icon } from '../components/Icon.tsx'
 import { Layout, ThemeToggle } from '../components/Layout.tsx'
+import { DOCK, TabBar } from '../components/TabBar.tsx'
+import type { Tab } from '../components/TabBar.tsx'
 import { UploadDialog } from '../components/UploadDialog.tsx'
 import { Entries } from '../services/Entries.ts'
 import { Markdown } from '../services/Markdown.ts'
@@ -17,6 +19,7 @@ import { artifactFile, formatBytes, previewOf } from '../artifacts.ts'
 import type { ArtifactFile, Preview } from '../artifacts.ts'
 import { MAX_VISIBLE_TAGS } from '../tags.ts'
 import {
+  SHEET,
   TAG_LIST,
   TAG_PANEL,
   TAG_ROW,
@@ -82,11 +85,18 @@ const NEW_BUTTON = 'btn ml-auto border-transparent'
 const SHARE_PANEL = [
   'pop-panel fixed inset-auto m-0 w-[400px] max-w-[calc(100vw-2rem)] rounded-lg border bg-background p-1 text-xs text-muted-foreground shadow-lg',
   'origin-top-right [position-anchor:--share] [top:calc(anchor(bottom)+6px)] [right:anchor(right)] [position-try-fallbacks:flip-inline]',
+  SHEET,
 ].join(' ')
 
 const MEETING_PANEL = [
   'pop-panel fixed inset-auto m-0 w-[360px] max-w-[calc(100vw-2rem)] rounded-lg border bg-background p-1 text-xs text-muted-foreground shadow-lg',
   'origin-top-right [position-anchor:--meeting] [top:calc(anchor(bottom)+6px)] [right:anchor(right)] [position-try-fallbacks:flip-inline]',
+  SHEET,
+].join(' ')
+
+const ENTRY_DOCK = [
+  DOCK,
+  'max-sm:min-h-[calc(3.5rem+env(safe-area-inset-bottom))] max-sm:flex-nowrap max-sm:gap-0.5 max-sm:overflow-x-auto max-sm:px-2',
 ].join(' ')
 
 const SHARE_ROW =
@@ -148,14 +158,26 @@ export const Page = (props: {
   readonly heading: Node
   readonly meta: Node
   readonly fill?: boolean
+  readonly active?: Tab
+  readonly dock?: boolean
   readonly children?: Node
 }) => (
   <main
-    class={`mx-auto max-w-[1200px] px-4 pt-[calc(1.5rem+env(safe-area-inset-top))] sm:px-8 sm:pt-[calc(2.5rem+env(safe-area-inset-top))] ${props.fill === true ? 'flex min-h-dvh flex-col pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(2.5rem+env(safe-area-inset-bottom))]' : 'pb-[calc(4rem+env(safe-area-inset-bottom))] sm:pb-[calc(6rem+env(safe-area-inset-bottom))]'}`}
+    class={`mx-auto max-w-[1200px] px-4 pt-[calc(1.5rem+env(safe-area-inset-top))] sm:px-8 sm:pt-[calc(2.5rem+env(safe-area-inset-top))] ${props.fill === true ? 'flex min-h-dvh flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-[calc(2.5rem+env(safe-area-inset-bottom))]' : 'pb-[calc(7.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(6rem+env(safe-area-inset-bottom))]'}`}
   >
     <div class="mb-6 flex h-7 sm:mb-10 items-center justify-between">
       {props.crumbs ?? <BackLink back={props.back} />}
-      <div class="flex items-center gap-1">
+      <div class="ml-auto flex items-center gap-1">
+        <button
+          type="button"
+          class="btn sm:hidden"
+          data-variant="ghost"
+          data-size="icon"
+          aria-label="Search"
+          data-search
+        >
+          <Icon name="search" class="size-4" />
+        </button>
         {props.actions}
         <ThemeToggle />
       </div>
@@ -169,6 +191,7 @@ export const Page = (props: {
     <div class={props.fill === true ? 'page-body flex flex-1 flex-col' : 'page-body'}>
       {props.children}
     </div>
+    {props.dock === true ? null : <TabBar active={props.active} />}
   </main>
 )
 
@@ -301,6 +324,7 @@ export const ListPage = Effect.fn('ListPage')(function* (props: {
     <Layout title={props.section.label}>
       <Page
         back={{ href: '/', label: 'Home' }}
+        active={props.section.type}
         heading={props.section.label}
         meta={
           <>
@@ -536,7 +560,10 @@ const MeetingActions = (props: { readonly entry: Entry }) => (
       popovertarget="meeting-panel"
     >
       <Icon name="calendar" />
-      {props.entry.meeting?.eventId === undefined ? 'Attach meeting' : 'Change meeting'}
+      <span class="sm:hidden">Meeting</span>
+      <span class="max-sm:hidden">
+        {props.entry.meeting?.eventId === undefined ? 'Attach meeting' : 'Change meeting'}
+      </span>
     </button>
     <div
       id="meeting-panel"
@@ -576,11 +603,11 @@ const ArtifactActions = (props: { readonly entry: Entry; readonly linkCount: num
       hx-boost="false"
     >
       <Icon name="external-link" />
-      Open
+      <span class="max-sm:sr-only">Open</span>
     </a>
     <a class="btn" data-variant="ghost" href={`/a/${props.entry.slug}?download`} hx-boost="false">
       <Icon name="download" />
-      Download
+      <span class="max-sm:sr-only">Download</span>
     </a>
   </>
 )
@@ -728,7 +755,7 @@ const SourcePreviewTabs = (props: { readonly startInSource: boolean }) => (
         aria-selected={String(props.startInSource)}
       >
         <Icon name="code" />
-        Source
+        <span class="max-sm:sr-only">Source</span>
       </button>
       <button
         type="button"
@@ -737,7 +764,7 @@ const SourcePreviewTabs = (props: { readonly startInSource: boolean }) => (
         aria-selected={String(!props.startInSource)}
       >
         <Icon name="eye" />
-        Preview
+        <span class="max-sm:sr-only">Preview</span>
       </button>
     </nav>
   </div>
@@ -813,6 +840,7 @@ export const EntryPage = Effect.fn('EntryPage')(function* (props: {
         <Page
           back={{ href: section.path, label: section.label }}
           fill={!isTaskList && file === undefined}
+          dock
           heading={
             <input
               class={TITLE_INPUT}
@@ -839,7 +867,10 @@ export const EntryPage = Effect.fn('EntryPage')(function* (props: {
               )}
               <span class="whitespace-nowrap">Edited {shortDate(entry, currentYear)}</span>
               <TagPills entry={entry} />
-              <div class="flex w-full flex-wrap items-center gap-1.5 sm:ml-auto sm:w-auto">
+              <div
+                class={`${ENTRY_DOCK} flex w-full flex-wrap items-center gap-1.5 sm:ml-auto sm:w-auto`}
+                data-dock
+              >
                 <span class="text-[12.5px] text-muted-foreground/60 tabular-nums" data-status />
                 <button
                   type="button"
@@ -857,7 +888,7 @@ export const EntryPage = Effect.fn('EntryPage')(function* (props: {
                 {isTaskList || file !== undefined ? null : (
                   <SourcePreviewTabs startInSource={startInSource} />
                 )}
-                <form method="post" action={`/e/${entry.slug}/archive`}>
+                <form class="max-sm:ml-auto" method="post" action={`/e/${entry.slug}/archive`}>
                   <button
                     type="submit"
                     class="btn"
